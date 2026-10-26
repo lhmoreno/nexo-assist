@@ -5,9 +5,16 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { sessions, users } from "@/lib/schema";
 import { currentUser } from "@/lib/auth";
+import { cookies } from "next/headers";
 const login = z.object({ email: z.email(), password: z.string().min(1) });
 export async function POST(req: Request) {
-  const parsed = login.safeParse(await req.json());
+  let payload: unknown;
+  try {
+    payload = await req.json();
+  } catch {
+    return NextResponse.json({ error: "JSON inválido." }, { status: 400 });
+  }
+  const parsed = login.safeParse(payload);
   if (!parsed.success)
     return NextResponse.json(
       { error: "Informe e-mail e senha." },
@@ -41,6 +48,8 @@ export async function GET() {
   return NextResponse.json({ user: await currentUser() });
 }
 export async function DELETE() {
+  const token = (await cookies()).get("nexo_session")?.value;
+  if (token) db.delete(sessions).where(eq(sessions.token, token)).run();
   const res = NextResponse.json({ ok: true });
   res.cookies.delete("nexo_session");
   return res;
