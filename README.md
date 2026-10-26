@@ -16,6 +16,8 @@ pnpm dev
 
 Abra <http://localhost:3000>. Para avaliar sem uma chave, defina `DEMO_MODE=true` em `.env.local`. A interface indica claramente esse modo. Ele usa classificação determinística limitada e serve apenas para percorrer os fluxos; com uma chave, a classificação e a seleção de ferramentas são feitas pelo agente Mastra.
 
+Capturas do modo de desenvolvimento: [login](docs/screenshots/login.webp), [chat do funcionário](docs/screenshots/chat-funcionario.webp) e [console do analista](docs/screenshots/console-analista.webp). Elas mostram dados de demonstração e o aviso do modo sem LLM.
+
 | Papel | E-mail | Senha |
 | --- | --- | --- |
 | Funcionária | `ana.paula@nexo.com` | Qualquer texto não vazio |
