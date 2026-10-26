@@ -1,0 +1,18 @@
+import Database from "better-sqlite3";
+import { drizzle } from "drizzle-orm/better-sqlite3";
+import fs from "node:fs";
+import path from "node:path";
+import * as schema from "./schema";
+const file = process.env.DATABASE_URL || "./data/nexo.sqlite";
+fs.mkdirSync(path.dirname(file), { recursive: true });
+const sqlite = new Database(file);
+sqlite.pragma("journal_mode = WAL");
+sqlite.pragma("foreign_keys = ON");
+sqlite.exec(`CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY,name TEXT NOT NULL,email TEXT NOT NULL UNIQUE,role TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),expires_at INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS conversations(id TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),status TEXT NOT NULL,analyst_id TEXT,draft TEXT,message_count INTEGER NOT NULL DEFAULT 0,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS messages(id TEXT PRIMARY KEY,conversation_id TEXT NOT NULL REFERENCES conversations(id),sender TEXT NOT NULL,body TEXT NOT NULL,trace TEXT,created_at INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS tickets(id TEXT PRIMARY KEY,owner_id TEXT NOT NULL REFERENCES users(id),type TEXT NOT NULL,title TEXT NOT NULL,description TEXT NOT NULL,category TEXT NOT NULL,impact TEXT NOT NULL,urgency TEXT NOT NULL,priority TEXT NOT NULL,status TEXT NOT NULL,due_at INTEGER NOT NULL,resolved_at INTEGER,updated_at INTEGER NOT NULL,created_at INTEGER NOT NULL,idempotency_key TEXT UNIQUE);
+CREATE TABLE IF NOT EXISTS articles(id TEXT PRIMARY KEY,title TEXT NOT NULL,body TEXT NOT NULL,keywords TEXT NOT NULL);`);
+export const db = drizzle(sqlite, { schema });
+export { sqlite };
