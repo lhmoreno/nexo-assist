@@ -45,7 +45,7 @@ export function getConversation(userId: string) {
     .where(eq(conversations.userId, userId))
     .orderBy(desc(conversations.updatedAt))
     .get();
-  if (!c || c.status === "closed" || c.messageCount >= 30) {
+  if (!c || c.status === "closed") {
     const now = Date.now();
     c = {
       id: randomUUID(),
@@ -105,13 +105,30 @@ function emit(
 export async function handleChat(
   userId: string,
   input: {
-    action: "send" | "confirm" | "cancel" | "select" | "transfer";
+    action: "send" | "confirm" | "cancel" | "select" | "transfer" | "new";
     text?: string;
     ticketId?: string;
   },
 ) {
   const c = getConversation(userId),
     started = Date.now();
+  if (input.action === "new") {
+    if (c.status !== "agent" || c.messageCount < 30 || c.draft)
+      throw new Error("Esta conversa ainda está em andamento.");
+    db.insert(conversations)
+      .values({
+        id: randomUUID(),
+        userId,
+        status: "agent",
+        analystId: null,
+        draft: null,
+        messageCount: 0,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      })
+      .run();
+    return conversationState(userId);
+  }
   if (c.status !== "agent") {
     if (input.action !== "send")
       throw new Error("O agente está pausado enquanto o analista atende.");

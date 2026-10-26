@@ -119,3 +119,41 @@ describe("reabertura e idempotência", () => {
     await expect(ticketService.reopen(user, t.id)).rejects.toThrow("7 dias");
   });
 });
+
+describe("limite de sessão", () => {
+  it("preserva a 30ª resposta e só inicia outra sessão por ação explícita", async () => {
+    const { eq } = await import("drizzle-orm");
+    const id = "test-limit";
+    db.insert(schema.users)
+      .values({ id, name: id, email: id + "@nexo.com", role: "employee" })
+      .onConflictDoNothing()
+      .run();
+    db.insert(schema.articles)
+      .values({
+        id: "test-vpn",
+        title: "VPN erro 809",
+        body: "Reinstale o cliente VPN.",
+        keywords: "vpn 809 rede",
+      })
+      .onConflictDoNothing()
+      .run();
+    const initial = conversationState(id);
+    db.update(schema.conversations)
+      .set({ messageCount: 29 })
+      .where(eq(schema.conversations.id, initial.conversation.id))
+      .run();
+    const last = await handleChat(id, {
+      action: "send",
+      text: "Como resolver erro 809 na VPN?",
+    });
+    expect(last.conversation.id).toBe(initial.conversation.id);
+    expect(last.conversation.messageCount).toBe(30);
+    expect(last.messages.at(-1)?.sender).toBe("agent");
+    await expect(
+      handleChat(id, { action: "send", text: "Outra dúvida" }),
+    ).rejects.toThrow("30");
+    const next = await handleChat(id, { action: "new" });
+    expect(next.conversation.id).not.toBe(initial.conversation.id);
+    expect(next.conversation.messageCount).toBe(0);
+  });
+});

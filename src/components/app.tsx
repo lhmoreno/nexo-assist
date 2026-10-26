@@ -359,7 +359,7 @@ function Employee({ user, onLogout }: { user: User; onLogout: () => void }) {
     bottom.current?.scrollIntoView({ behavior: "smooth" });
   }, [state?.messages.length]);
   async function act(
-    action: "send" | "confirm" | "cancel" | "select" | "transfer",
+    action: "send" | "confirm" | "cancel" | "select" | "transfer" | "new",
     ticketId?: string,
     quick?: string,
   ) {
@@ -478,6 +478,19 @@ function Employee({ user, onLogout }: { user: User; onLogout: () => void }) {
                 </Button>
               </div>
             )}
+            {c?.messageCount === 30 && !c.draft && c.status === "agent" && (
+              <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-center text-sm text-blue-900">
+                Esta conversa chegou ao limite de 30 mensagens.
+                <Button
+                  className="ml-3"
+                  size="sm"
+                  onClick={() => act("new")}
+                  disabled={busy}
+                >
+                  Nova conversa
+                </Button>
+              </div>
+            )}
             {busy && (
               <div className="text-sm text-slate-500">
                 O Nexo Assist está analisando...
@@ -496,7 +509,10 @@ function Employee({ user, onLogout }: { user: User; onLogout: () => void }) {
               <input
                 value={text}
                 onChange={(e) => setText(e.target.value)}
-                disabled={busy || (c?.messageCount || 0) >= 30}
+                disabled={
+                  busy ||
+                  (c?.status === "agent" && (c?.messageCount || 0) >= 30)
+                }
                 placeholder={
                   c?.status !== "agent"
                     ? "Mensagem para o analista..."
@@ -507,7 +523,11 @@ function Employee({ user, onLogout }: { user: User; onLogout: () => void }) {
               <Button
                 type="submit"
                 size="icon"
-                disabled={busy || !text.trim()}
+                disabled={
+                  busy ||
+                  !text.trim() ||
+                  (c?.status === "agent" && (c?.messageCount || 0) >= 30)
+                }
                 aria-label="Enviar mensagem"
               >
                 <Send size={16} />
@@ -521,7 +541,11 @@ function Employee({ user, onLogout }: { user: User; onLogout: () => void }) {
                   </span>
                 )}
               </span>
-              <span>{c?.messageCount || 0}/30 mensagens</span>
+              <span>
+                {c?.status === "agent"
+                  ? `${c.messageCount}/30 mensagens ao agente`
+                  : "Atendimento humano"}
+              </span>
             </div>
           </div>
         </div>

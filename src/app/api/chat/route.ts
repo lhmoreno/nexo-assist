@@ -3,7 +3,7 @@ import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { conversationState, handleChat } from "@/lib/conversation";
 const body = z.object({
-  action: z.enum(["send", "confirm", "cancel", "select", "transfer"]),
+  action: z.enum(["send", "confirm", "cancel", "select", "transfer", "new"]),
   text: z.string().optional(),
   ticketId: z.string().optional(),
 });
