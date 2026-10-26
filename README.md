@@ -66,7 +66,7 @@ Vitest cobre prioridade e SLA, duplicidade, confirmação, privacidade, transfer
 
 ## Modelo, custo e decisões
 
-O padrão é `openai/gpt-4.1-mini`, configurável por `MASTRA_MODEL`. Foi escolhido por compatibilidade com ferramentas e saída estruturada e custo baixo para a triagem. Em outubro de 2026, a [página oficial do modelo](https://developers.openai.com/api/docs/models/gpt-4.1-mini) informa US$ 0,40 por 1 milhão de tokens de entrada e US$ 1,60 por 1 milhão de tokens de saída; preços e disponibilidade podem mudar. Cada mensagem comum usa uma chamada de classificação, além de eventuais ferramentas locais. Confirmação, seleção de chamado e transferência explícita não chamam o modelo.
+O padrão é `openai/gpt-4.1-mini`, configurável por `MASTRA_MODEL`. Foi escolhido por compatibilidade com ferramentas e saída estruturada e custo baixo para a triagem. Em outubro de 2026, a [página oficial do modelo](https://developers.openai.com/api/docs/models/gpt-4.1-mini) informa US$ 0,40 por 1 milhão de tokens de entrada e US$ 1,60 por 1 milhão de tokens de saída; a documentação oficial já o marca como deprecated, portanto `MASTRA_MODEL` deve ser revisto antes de uso em produção. Cada mensagem comum usa uma chamada de classificação, além de eventuais ferramentas locais. Confirmação, seleção de chamado e transferência explícita não chamam o modelo.
 
 ## Trade-offs e próximos passos
 
