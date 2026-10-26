@@ -1,0 +1,47 @@
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { randomBytes } from "node:crypto";
+import { eq } from "drizzle-orm";
+import { db } from "@/lib/db";
+import { sessions, users } from "@/lib/schema";
+import { currentUser } from "@/lib/auth";
+const login = z.object({ email: z.email(), password: z.string().min(1) });
+export async function POST(req: Request) {
+  const parsed = login.safeParse(await req.json());
+  if (!parsed.success)
+    return NextResponse.json(
+      { error: "Informe e-mail e senha." },
+      { status: 400 },
+    );
+  const user = db
+    .select()
+    .from(users)
+    .where(eq(users.email, parsed.data.email.toLowerCase()))
+    .get();
+  if (!user)
+    return NextResponse.json(
+      { error: "Usuário de demonstração não encontrado." },
+      { status: 401 },
+    );
+  const token = randomBytes(32).toString("hex");
+  db.insert(sessions)
+    .values({ token, userId: user.id, expiresAt: Date.now() + 7 * 86400000 })
+    .run();
+  const res = NextResponse.json({ user });
+  res.cookies.set("nexo_session", token, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 7 * 86400,
+  });
+  return res;
+}
+export async function GET() {
+  return NextResponse.json({ user: await currentUser() });
+}
+export async function DELETE() {
+  const res = NextResponse.json({ ok: true });
+  res.cookies.delete("nexo_session");
+  return res;
+}
