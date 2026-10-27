@@ -3,13 +3,7 @@ import { randomUUID } from "node:crypto";
 import { db } from "./db";
 import { conversations, messages, tickets } from "./schema";
 import { decide, searchKnowledge } from "./agent";
-import {
-  dueAt,
-  isOverdue,
-  priorityFor,
-  type Impact,
-  type Urgency,
-} from "./rules";
+import { isOverdue, priorityFor, type Impact, type Urgency } from "./rules";
 import { ticketService } from "./tickets";
 type Draft = {
   action: "create" | "update" | "reopen";
@@ -244,7 +238,9 @@ export async function handleChat(
     if (isOverdue(t.dueAt, t.status)) transfer(c.id, "chamado vencido");
     return emit(
       c.id,
-      `${t.id} — ${t.title}. Status: ${t.status}. Prioridade: ${t.priority}. ${isOverdue(t.dueAt, t.status) ? "Prazo vencido. Encaminhei para um analista." : "Prazo: " + new Date(t.dueAt).toLocaleString("pt-BR")}.`,
+      isOverdue(t.dueAt, t.status)
+        ? "Esse chamado passou do prazo de atualização. Encaminhei a conversa para um analista."
+        : "Encontrei o chamado. Confira o status e o prazo abaixo.",
       {
         intent: "list",
         type: t.type,
@@ -255,7 +251,14 @@ export async function handleChat(
         confidence: 1,
         tools: ["ticketService.get"],
         results: [t.id, t.status],
-        rules: ["Consulta restrita ao proprietário", "Verificação de SLA"],
+        ticket: t,
+        rules: [
+          "Consulta restrita ao proprietário",
+          "Verificação de SLA",
+          ...(isOverdue(t.dueAt, t.status)
+            ? ["Transferência de chamado vencido"]
+            : []),
+        ],
         reason: "Chamado selecionado pelo funcionário.",
       },
       started,
@@ -334,14 +337,13 @@ export async function handleChat(
       rules.push("Baixa confiança");
     } else if (d.intent === "list") {
       results = open.map((t) => `${t.id}: ${t.status}`);
-      body = open.length
-        ? `Encontrei ${open.length} chamado(s) em andamento. Selecione um card abaixo para ver os detalhes.`
-        : "Não encontrei chamados em andamento no seu nome.";
+      body = owned.length
+        ? `Encontrei ${owned.length} ${owned.length === 1 ? "chamado" : "chamados"} no seu nome; ${open.length} ${open.length === 1 ? "está" : "estão"} em andamento. Selecione um chamado abaixo para ver os detalhes.`
+        : "Não encontrei chamados no seu nome.";
       const overdue = open.filter((t) => isOverdue(t.dueAt, t.status));
       if (overdue.length) {
-        body += ` ${overdue.length} está(ão) com prazo vencido. Encaminhei a conversa para um analista.`;
-        transfer(c.id, "chamado vencido");
-        rules.push("Transferência de chamado vencido");
+        body += ` ${overdue.length} ${overdue.length === 1 ? "está" : "estão"} com prazo vencido. Selecione um deles para consultar e encaminhar ao analista.`;
+        rules.push("Prazo dos chamados verificado");
       }
     } else if (d.intent === "knowledge") {
       const found = searchKnowledge(text);
@@ -378,7 +380,8 @@ export async function handleChat(
           urgency,
         };
         saveDraft(c.id, draft);
-        body = `Rascunho: ${draft.title}\nTipo: ${type} · Categoria: ${category}\nImpacto: ${impact} · Urgência: ${urgency}\nPrioridade: ${priority} · Prazo: ${dueAt(new Date(), priority).toLocaleString("pt-BR")}\n\nConfirme para criar ou cancele. Nenhum chamado foi criado ainda.`;
+        body =
+          "Preparei um rascunho com a prioridade e o prazo calculados. Confira os dados antes de criar o chamado.";
         rules.push(
           "Confirmação obrigatória",
           "Prioridade calculada no backend",
@@ -398,7 +401,7 @@ export async function handleChat(
           description: d.description || text,
         };
         saveDraft(c.id, draft);
-        body = `Rascunho para ${d.intent === "update" ? "atualizar" : "reabrir"} ${target.id}: ${draft.description}. Confirme ou cancele.`;
+        body = `Preparei um rascunho para ${d.intent === "update" ? "atualizar" : "reabrir"} o chamado ${target.id}. Confira antes de confirmar.`;
         rules.push("Confirmação obrigatória", "Proprietário validado");
       }
     } else body = "Descreva sua dúvida de TI ou escolha uma opção rápida.";
@@ -419,6 +422,7 @@ export async function handleChat(
         confidence: d.confidence,
         tools,
         results,
+        draft,
         rules,
         reason:
           d.intent === "create"

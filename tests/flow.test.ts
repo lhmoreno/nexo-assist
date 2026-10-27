@@ -157,3 +157,47 @@ describe("limite de sessão", () => {
     expect(next.conversation.messageCount).toBe(0);
   });
 });
+
+describe("consulta de chamado vencido", () => {
+  it("permite selecionar o chamado antes da transferência", async () => {
+    const { eq } = await import("drizzle-orm");
+    const owner = "test-overdue";
+    db.insert(schema.users)
+      .values({
+        id: owner,
+        name: owner,
+        email: owner + "@nexo.com",
+        role: "employee",
+      })
+      .onConflictDoNothing()
+      .run();
+    const t = (
+      await ticketService.create({
+        ownerId: owner,
+        type: "INC",
+        title: "Notebook lento após atualização de teste",
+        description: "Notebook lento após atualização de teste",
+        category: "Hardware",
+        impact: "pessoa",
+        urgency: "normal",
+        key: randomUUID(),
+      })
+    ).ticket;
+    db.update(schema.tickets)
+      .set({ dueAt: Date.now() - 1000 })
+      .where(eq(schema.tickets.id, t.id))
+      .run();
+    const listed = await handleChat(owner, {
+      action: "send",
+      text: "Quero consultar o status dos meus chamados",
+    });
+    expect(listed.conversation.status).toBe("agent");
+    expect(listed.messages.at(-1)?.body).toContain("Selecione");
+    const selected = await handleChat(owner, {
+      action: "select",
+      ticketId: t.id,
+    });
+    expect(selected.conversation.status).toBe("waiting");
+    expect(selected.messages.at(-1)?.body).toContain("analista");
+  });
+});

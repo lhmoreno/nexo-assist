@@ -6,7 +6,9 @@ import * as schema from "./schema";
 const file = process.env.DATABASE_URL || "./data/nexo.sqlite";
 fs.mkdirSync(path.dirname(file), { recursive: true });
 const sqlite = new Database(file);
-sqlite.pragma("journal_mode = WAL");
+// A local Next.js dev server reloads modules frequently. A rollback journal
+// keeps demo data durable even when a stale development connection is closed.
+sqlite.pragma("journal_mode = DELETE");
 sqlite.pragma("foreign_keys = ON");
 sqlite.exec(`CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY,name TEXT NOT NULL,email TEXT NOT NULL UNIQUE,role TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),expires_at INTEGER NOT NULL);

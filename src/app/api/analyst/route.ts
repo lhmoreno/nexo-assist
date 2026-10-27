@@ -24,6 +24,13 @@ export async function GET(req: Request) {
         employee:
           db.select().from(users).where(eq(users.id, c.userId)).get()?.name ||
           "Funcionário",
+        preview:
+          db
+            .select()
+            .from(messages)
+            .where(eq(messages.conversationId, c.id))
+            .orderBy(desc(messages.createdAt))
+            .get()?.body || "Conversa iniciada",
       }));
     if (!id) return NextResponse.json({ conversations: list });
     const c = list.find((x) => x.id === id);

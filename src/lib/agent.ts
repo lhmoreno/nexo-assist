@@ -175,7 +175,14 @@ function demoDecision(input: string): Decision {
     impact,
     urgency,
     confidence: intent === "unclear" ? 0.4 : 0.85,
-    title: input.slice(0, 90),
+    title: (
+      input
+        .replace(
+          /^(?:quero\s+)?(?:abrir|criar)\s+(?:um\s+)?chamado(?:\s+de\s+ti)?\s*[:\-]?\s*/i,
+          "",
+        )
+        .trim() || input
+    ).slice(0, 90),
     description: input,
     ticketId: id,
     answer: "",

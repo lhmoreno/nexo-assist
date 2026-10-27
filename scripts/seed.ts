@@ -1,5 +1,11 @@
 import { db } from "../src/lib/db";
-import { users, tickets, articles } from "../src/lib/schema";
+import {
+  users,
+  tickets,
+  articles,
+  conversations,
+  messages,
+} from "../src/lib/schema";
 import { dueAt } from "../src/lib/rules";
 const now = Date.now(),
   days = (n: number) => now - n * 86400000;
@@ -20,6 +26,30 @@ for (const u of [
     id: "u-carla",
     name: "Carla Souza",
     email: "carla.souza@nexo.com",
+    role: "employee" as const,
+  },
+  {
+    id: "u-diego",
+    name: "Diego Ramos",
+    email: "diego.ramos@nexo.com",
+    role: "employee" as const,
+  },
+  {
+    id: "u-elisa",
+    name: "Elisa Prado",
+    email: "elisa.prado@nexo.com",
+    role: "employee" as const,
+  },
+  {
+    id: "u-fabio",
+    name: "Fábio Nunes",
+    email: "fabio.nunes@nexo.com",
+    role: "employee" as const,
+  },
+  {
+    id: "u-gabi",
+    name: "Gabriela Rocha",
+    email: "gabriela.rocha@nexo.com",
     role: "employee" as const,
   },
   {
@@ -180,4 +210,81 @@ for (const [id, title, body, keywords] of help)
     .values({ id, title, body, keywords })
     .onConflictDoNothing()
     .run();
+const sampleConversations = [
+  [
+    "c-demo-bruno",
+    "u-bruno",
+    "waiting",
+    null,
+    "A VPN continua com erro 809. Preciso falar com um analista.",
+    0,
+  ],
+  [
+    "c-demo-carla",
+    "u-carla",
+    "analyst",
+    "a-marina",
+    "Meu e-mail não sincroniza desde ontem.",
+    1,
+  ],
+  [
+    "c-demo-diego",
+    "u-diego",
+    "agent",
+    null,
+    "Como instalo o software aprovado?",
+    2,
+  ],
+  [
+    "c-demo-elisa",
+    "u-elisa",
+    "waiting",
+    null,
+    "A equipe inteira ficou sem acesso à rede.",
+    3,
+  ],
+  ["c-demo-fabio", "u-fabio", "closed", null, "Obrigado pelo atendimento.", 4],
+  [
+    "c-demo-gabi",
+    "u-gabi",
+    "agent",
+    null,
+    "Preciso de acesso a uma pasta compartilhada.",
+    5,
+  ],
+] as const;
+for (const [
+  id,
+  userId,
+  status,
+  analystId,
+  body,
+  minutes,
+] of sampleConversations) {
+  const timestamp = now - (minutes + 1) * 60000;
+  db.insert(conversations)
+    .values({
+      id,
+      userId,
+      status,
+      analystId,
+      draft: null,
+      messageCount: 1,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    })
+    .onConflictDoNothing()
+    .run();
+  db.insert(messages)
+    .values({
+      id: `m-${id}`,
+      conversationId: id,
+      sender: "employee",
+      body,
+      trace: null,
+      createdAt: timestamp,
+    })
+    .onConflictDoNothing()
+    .run();
+}
 console.log("Seed concluído");

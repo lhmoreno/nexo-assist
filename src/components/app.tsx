@@ -6,12 +6,11 @@ import {
   Check,
   ChevronDown,
   Headphones,
-  LifeBuoy,
   LogOut,
   MessageCircle,
   Send,
-  ShieldCheck,
-  X,
+  UserRound,
+  Search,
 } from "lucide-react";
 import { Button } from "./ui/button";
 type User = {
@@ -37,6 +36,7 @@ type Conversation = {
   employee?: string;
   userId: string;
   analystId: string | null;
+  updatedAt: number;
 };
 type Msg = {
   id: string;
@@ -61,15 +61,36 @@ async function api<T>(url: string, method = "GET", body?: object): Promise<T> {
   if (!r.ok) throw new Error(j.error || "Falha na requisição.");
   return j;
 }
+function NexoMark({
+  light = false,
+  size = 24,
+}: {
+  light?: boolean;
+  size?: number;
+}) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 28 28"
+      aria-hidden="true"
+      className={light ? "text-white" : "text-[#037AF6]"}
+    >
+      <path
+        transform="translate(1.5 3.5)"
+        d="M21.763 0.24493l-3.374 1.687c-0.623 0.308-0.973 0.903-0.973 1.631l0 6.293-11.193-9.429c-0.623-0.469-1.372-0.553-2.03-0.245l-3.185 1.631c-0.651 0.322-1.008 0.924-1.008 1.673l0 15.218c0 1.477 1.526 2.289 2.716 1.785l3.073-1.617c0.693-0.322 1.057-0.952 1.057-1.722l0-7.7 11.732 10.591c0.602 0.546 1.421 0.679 2.086 0.364l2.786-1.505c0.602-0.315 0.938-0.931 0.938-1.68l0-15.288c0-1.463-1.505-2.275-2.625-1.687z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
 function Logo({ dark = false }: { dark?: boolean }) {
   return (
     <div
-      className={`flex items-center gap-2.5 font-semibold tracking-tight ${dark ? "text-white" : "text-slate-900"}`}
+      className={`flex items-center gap-2.5 text-[17px] font-bold ${dark ? "text-white" : "text-[#1B2431]"}`}
     >
-      <span className="flex size-8 items-center justify-center rounded-lg bg-blue-600 text-white">
-        <LifeBuoy size={18} />
-      </span>
-      Nexo Assist
+      <NexoMark light={dark} />
+      <span>Nexo Assist</span>
     </div>
   );
 }
@@ -95,85 +116,144 @@ function Login({ onLogin }: { onLogin: (u: User) => void }) {
     }
   }
   return (
-    <div className="grid min-h-screen lg:grid-cols-2">
-      <section className="flex flex-col justify-between bg-[#101b2f] p-8 text-white lg:p-14">
+    <div className="min-h-screen bg-white lg:grid lg:grid-cols-[minmax(0,800fr)_minmax(0,640fr)]">
+      <section className="flex min-h-[620px] flex-col justify-between bg-[#1B2431] px-8 py-10 text-white lg:min-h-screen lg:px-16 lg:pb-12">
         <Logo dark />
-        <div className="max-w-lg pb-16">
-          <div className="mb-7 inline-flex rounded-full border border-slate-600 px-3 py-1 text-xs text-blue-200">
-            SERVICE DESK INTELIGENTE
+        <div className="w-full max-w-[650px]">
+          <div className="text-[13.5px] font-medium text-white/55">
+            Service desk de TI da Nexo
           </div>
-          <h1 className="text-4xl font-semibold leading-tight lg:text-6xl">
+          <h1 className="font-display mt-5 max-w-[640px] text-[48px] leading-[1.04] tracking-[-.025em] md:text-[54px]">
             Seu problema de TI, resolvido em uma conversa.
           </h1>
-          <p className="mt-6 max-w-md text-lg leading-7 text-slate-300">
-            Tire dúvidas, acompanhe chamados e receba ajuda de um analista
-            quando precisar.
+          <p className="mt-5 max-w-[520px] text-[16px] leading-[1.55] text-white/65">
+            Descreva o que está acontecendo. O assistente consulta seus
+            chamados, busca na central de ajuda e chama um analista quando
+            precisa.
           </p>
-          <div className="mt-10 rounded-xl border border-slate-600 bg-white/5 p-5 text-sm text-slate-200">
-            <p>“Meu notebook ficou lento depois da atualização.”</p>
-            <p className="mt-3 rounded-lg bg-blue-600/30 p-3">
-              Entendi. Vou consultar seus chamados e preparar os próximos
-              passos.
-            </p>
+          <div className="ml-0 mt-9 max-w-[500px] rounded-[14px] border border-white/15 bg-white/[.04] p-[18px] lg:ml-24">
+            <div className="ml-auto max-w-[355px] rounded-[8px] bg-white px-3 py-2 text-[13px] text-[#1B2431]">
+              Meu notebook não conecta na VPN. Erro 809.
+            </div>
+            <div className="mt-3 text-[12px] font-semibold text-white/80">
+              Nexo Assist{" "}
+              <span className="ml-2 font-normal text-white/45">
+                consultou seus chamados · preparou um rascunho
+              </span>
+            </div>
+            <div className="mt-1 rounded-[8px] bg-white/10 p-3 text-[13px] leading-5 text-white">
+              Encontrei uma orientação para o erro 809. Posso preparar um
+              chamado para você confirmar.
+            </div>
+            <div className="mt-2 rounded-[8px] bg-white px-3 py-2 text-[12px] text-[#3D4656]">
+              Rede e VPN · confira os dados antes de criar
+            </div>
           </div>
         </div>
-        <p className="text-sm text-slate-400">Nexo · Tecnologia para pessoas</p>
+        <div className="grid grid-cols-3 gap-4 border-t border-white/15 pt-6">
+          <div>
+            <strong className="font-display block text-[32px] leading-none">
+              24h
+            </strong>
+            <span className="mt-1 block text-[12px] text-white/55">
+              plantão para casos críticos
+            </span>
+          </div>
+          <div className="border-l border-white/15 pl-5">
+            <strong className="font-display block text-[32px] leading-none">
+              8
+            </strong>
+            <span className="mt-1 block text-[12px] text-white/55">
+              artigos de ajuda no seed
+            </span>
+          </div>
+          <div className="border-l border-white/15 pl-5">
+            <strong className="font-display block text-[32px] leading-none">
+              2
+            </strong>
+            <span className="mt-1 block text-[12px] text-white/55">
+              analistas de exemplo
+            </span>
+          </div>
+        </div>
       </section>
-      <section className="flex items-center justify-center bg-white p-8">
-        <form onSubmit={submit} className="w-full max-w-sm">
-          <h2 className="text-3xl font-semibold">Entrar</h2>
-          <p className="mt-2 text-sm text-slate-500">
-            Acesse com seu e-mail corporativo.
+      <section className="flex min-h-[620px] flex-col justify-between px-8 py-10 lg:min-h-screen lg:px-14">
+        <div className="self-end text-right text-[13px] text-[#5B6472]">
+          Problema para entrar?
+          <br />
+          <a href="tel:4000" className="font-semibold text-[#0069C7]">
+            Ligue no ramal 4000
+          </a>
+        </div>
+        <form onSubmit={submit} className="mx-auto w-full max-w-[380px]">
+          <h2 className="font-display text-[40px] leading-none">Entrar</h2>
+          <p className="mt-2 text-[15px] text-[#5B6472]">
+            Use seu e-mail corporativo e a senha da rede Nexo.
           </p>
-          <label className="mt-8 block text-sm font-medium">
-            E-mail corporativo
-            <input
-              className="mt-2 w-full rounded-lg border border-slate-300 px-4 py-3"
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-          </label>
-          <label className="mt-5 block text-sm font-medium">
-            Senha
-            <input
-              className="mt-2 w-full rounded-lg border border-slate-300 px-4 py-3"
-              type="password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-          </label>
+          <div className="mt-7 space-y-[18px]">
+            <label className="block text-[13.5px] font-medium">
+              E-mail corporativo
+              <input
+                autoComplete="username"
+                className="mt-2 h-11 w-full rounded-[10px] border border-[#E6E8EC] px-3 text-[14.5px]"
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </label>
+            <label className="block text-[13.5px] font-medium">
+              Senha
+              <input
+                autoComplete="current-password"
+                className="mt-2 h-11 w-full rounded-[10px] border border-[#E6E8EC] px-3 text-[14.5px]"
+                type="password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </label>
+            <label className="flex items-center gap-2 text-[13px] text-[#3D4656]">
+              <input type="checkbox" defaultChecked /> Manter conectado neste
+              computador
+            </label>
+          </div>
           {error && (
-            <p role="alert" className="mt-4 text-sm text-red-600">
+            <p role="alert" className="mt-3 text-sm text-[#C4161D]">
               {error}
             </p>
           )}
-          <Button className="mt-7 w-full" size="lg" disabled={busy}>
-            {busy ? "Entrando..." : "Entrar"}
-            <ArrowRight size={16} />
+          <Button
+            type="submit"
+            className="mt-7 h-11 w-full rounded-[10px] bg-[#0062C4] text-[15.5px] hover:bg-[#0071D6]"
+            disabled={busy}
+          >
+            {busy ? "Entrando..." : "Entrar"} <ArrowRight size={16} />
           </Button>
-          <p className="mt-5 text-xs leading-5 text-slate-500">
-            Demonstração: Ana Paula ou João Martins. Qualquer senha não vazia.
+          <p className="mt-5 border-t border-[#E6E8EC] pt-4 text-xs leading-5 text-[#5B6472]">
+            Demonstração: qualquer senha não vazia. Selecione um perfil:
           </p>
-          <div className="mt-5 flex flex-wrap gap-2">
+          <div className="mt-2 flex gap-3 text-xs">
             <button
               type="button"
-              className="text-xs text-blue-600 underline"
+              className="text-[#0069C7] underline"
               onClick={() => setEmail("ana.paula@nexo.com")}
             >
               Funcionária
             </button>
             <button
               type="button"
-              className="text-xs text-blue-600 underline"
+              className="text-[#0069C7] underline"
               onClick={() => setEmail("joao.martins@nexo.com")}
             >
               Analista
             </button>
           </div>
         </form>
+        <div className="flex justify-between gap-2 text-[12px] text-[#5B6472]">
+          <span>© 2026 Nexo · Service desk de TI</span>
+          <span>Dados de demonstração</span>
+        </div>
       </section>
     </div>
   );
@@ -187,30 +267,61 @@ function Trace({ raw }: { raw: string | null }) {
     return null;
   }
   const rows = [
-    ["Intenção", t.intent],
-    ["Tipo e categoria", [t.type, t.category].filter(Boolean).join(" · ")],
-    ["Impacto e urgência", [t.impact, t.urgency].filter(Boolean).join(" · ")],
-    ["Prioridade", t.priority],
+    ["Intenção", t.intent || "Não informada"],
+    [
+      "Tipo e categoria",
+      [t.type, t.category].filter(Boolean).join(" · ") || "Não aplicável",
+    ],
+    [
+      "Impacto e urgência",
+      [t.impact, t.urgency].filter(Boolean).join(" · ") || "Não aplicável",
+    ],
+    ["Prioridade", t.priority || "Não aplicável"],
     [
       "Confiança",
       typeof t.confidence === "number"
         ? `${Math.round(t.confidence * 100)}%`
-        : null,
+        : "Não informada",
     ],
     ["Ferramentas", ((t.tools as string[]) || []).join(", ") || "Nenhuma"],
     ["Resultados", ((t.results as string[]) || []).join("; ") || "Nenhum"],
     ["Regras", ((t.rules as string[]) || []).join("; ") || "Nenhuma"],
-    ["Justificativa", t.reason],
-    ["Tempo", typeof t.executionMs === "number" ? `${t.executionMs} ms` : null],
+    ["Justificativa", t.reason || "Sem justificativa registrada"],
+    [
+      "Tempo",
+      typeof t.executionMs === "number"
+        ? `${t.executionMs} ms`
+        : "Não informado",
+    ],
     ["Erros", ((t.errors as string[]) || []).join("; ") || "Nenhum"],
-  ].filter(([, v]) => v);
+  ];
+  const toolNames: Record<string, string> = {
+    "ticketService.list": "consultou seus chamados",
+    listTickets: "consultou seus chamados",
+    searchKnowledge: "buscou na central de ajuda",
+    "ticketService.get": "consultou o chamado",
+    ticketService: "executou no serviço de chamados",
+  };
+  const actions = ((t.tools as string[]) || []).map((x) => toolNames[x] || x);
+  if (t.priority && t.intent === "create")
+    actions.push("classificou a prioridade");
+  if (t.draft) actions.push("montou o rascunho");
+  if (actions.length === 0) actions.push("classificou a solicitação");
   return (
-    <details className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-      <summary className="flex items-center gap-2 font-medium">
-        <ShieldCheck size={14} /> Ações e decisões do agente{" "}
-        <ChevronDown size={13} />
+    <details className="mb-2 max-w-[600px] text-[12.5px] text-[#5B6472]">
+      <summary className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md py-1">
+        <span className="font-semibold text-[#1B2431]">Nexo Assist</span>
+        {actions.slice(0, 3).map((x, i) => (
+          <span key={i} className="inline-flex items-center gap-1">
+            <Check size={12} />
+            {x}
+          </span>
+        ))}
+        <span className="ml-1 inline-flex items-center gap-1 text-[#0069C7]">
+          Detalhes <ChevronDown size={12} />
+        </span>
       </summary>
-      <dl className="mt-3 grid gap-2 border-t border-amber-200 pt-3 sm:grid-cols-2">
+      <dl className="mt-2 grid gap-2 rounded-[10px] border border-[#E6E8EC] bg-white p-3 sm:grid-cols-2">
         {rows.map(([k, v]) => (
           <div key={String(k)}>
             <dt className="font-semibold">{String(k)}</dt>
@@ -259,38 +370,238 @@ function TicketCard({
     </button>
   );
 }
-function Message({ m }: { m: Msg }) {
-  const own = m.sender === "employee";
+function traceOf(raw: string | null): Record<string, unknown> {
+  try {
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+function TicketSelector({
+  tickets,
+  onSelect,
+}: {
+  tickets: TicketData[];
+  onSelect?: (id: string) => void;
+}) {
   return (
-    <div className={"flex " + (own ? "justify-end" : "justify-start")}>
-      <div className={"max-w-[85%] sm:max-w-[75%] " + (own ? "" : "w-full")}>
-        <div
-          className={
-            "mb-1 text-[11px] text-slate-400 " + (own ? "text-right" : "")
-          }
+    <div className="mt-2 max-w-[600px] overflow-hidden rounded-[14px] border border-[#E6E8EC] bg-white shadow-[0_2px_8px_#1B243108]">
+      {tickets.map((t) => (
+        <button
+          key={t.id}
+          disabled={!onSelect}
+          onClick={() => onSelect?.(t.id)}
+          className="flex min-h-[46px] w-full items-center gap-3 border-b border-[#E6E8EC] px-4 text-left last:border-0 hover:bg-[#0062C40A]"
         >
-          {m.sender === "employee"
-            ? "Você"
-            : m.sender === "agent"
-              ? "Nexo Assist"
-              : m.sender === "analyst"
-                ? "Analista"
-                : "Sistema"}{" "}
-          ·{" "}
-          {new Date(m.createdAt).toLocaleTimeString("pt-BR", {
-            hour: "2-digit",
-            minute: "2-digit",
+          <span className="size-4 shrink-0 rounded-full border border-[#C7CDD5]" />
+          <span className="w-[80px] shrink-0 text-[12.5px] font-medium text-[#5B6472]">
+            {t.id}
+          </span>
+          <span className="min-w-0 flex-1 truncate text-[14px] font-medium">
+            {t.title}
+          </span>
+          <span className="hidden items-center gap-1.5 text-[12px] text-[#5B6472] sm:inline-flex">
+            <span
+              className={`size-1.5 rounded-full ${t.status === "Aprovado" || t.status === "Resolvido" ? "bg-[#00BD6C]" : t.status === "Aguardando analista" ? "bg-[#F5A500]" : "bg-[#0285F7]"}`}
+            />
+            {t.status}
+          </span>
+          <span className="hidden w-[60px] shrink-0 whitespace-nowrap text-right text-[12px] text-[#5B6472] md:block">
+            {new Date(t.dueAt)
+              .toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })
+              .replace(" de ", " ")}
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+}
+function TicketDetail({
+  ticket,
+  onTransfer,
+  onAddInfo,
+}: {
+  ticket: TicketData;
+  onTransfer?: () => void;
+  onAddInfo?: () => void;
+}) {
+  const [now] = useState(() => Date.now());
+  const overdue =
+    ticket.dueAt < now &&
+    !["Resolvido", "Fechado", "Aprovado"].includes(ticket.status);
+  return (
+    <div className="mt-2 max-w-[600px] overflow-hidden rounded-[14px] border border-[#E6E8EC] bg-white shadow-[0_2px_8px_#1B243108]">
+      <div className="px-[18px] pt-4 pb-3">
+        <div className="flex items-center justify-between gap-2 text-[12.5px] text-[#5B6472]">
+          <span>Chamado · {ticket.id}</span>
+          <span className={overdue ? "font-medium text-[#946300]" : ""}>
+            {overdue ? "● Prazo vencido" : ticket.status}
+          </span>
+        </div>
+        <h3 className="mt-2 text-[18px] font-semibold leading-6">
+          {ticket.title}
+        </h3>
+        <p className="mt-1 text-[13.5px] leading-5 text-[#3D4656]">
+          {ticket.description}
+        </p>
+      </div>
+      <div className="mx-[18px] grid grid-cols-2 gap-3 border-t border-[#E6E8EC] py-3 text-[13px] sm:grid-cols-4">
+        <div>
+          <span className="block text-[#8E8E8E]">Categoria</span>
+          {ticket.category}
+        </div>
+        <div>
+          <span className="block text-[#8E8E8E]">Prioridade</span>
+          {ticket.priority}
+        </div>
+        <div>
+          <span className="block text-[#8E8E8E]">Status</span>
+          {ticket.status}
+        </div>
+        <div>
+          <span className="block text-[#8E8E8E]">Prazo</span>
+          {new Date(ticket.dueAt).toLocaleString("pt-BR", {
+            dateStyle: "short",
+            timeStyle: "short",
           })}
         </div>
+      </div>
+      {(onTransfer || onAddInfo) && (
+        <div className="flex flex-wrap gap-2 border-t border-[#E6E8EC] bg-[#F6F7F9] px-[18px] py-2">
+          {onTransfer && (
+            <Button variant="outline" size="sm" onClick={onTransfer}>
+              Falar com um analista
+            </Button>
+          )}
+          {onAddInfo && (
+            <Button variant="outline" size="sm" onClick={onAddInfo}>
+              Adicionar informação
+            </Button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+type DraftView = {
+  action: "create" | "update" | "reopen";
+  type?: "INC" | "REQ";
+  title?: string;
+  description?: string;
+  category?: string;
+  impact?: string;
+  urgency?: string;
+  ticketId?: string;
+};
+function DraftCard({
+  draft,
+  priority,
+  active,
+  onConfirm,
+  onCancel,
+}: {
+  draft: DraftView;
+  priority: unknown;
+  active: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="mt-2 max-w-[600px] overflow-hidden rounded-[14px] border border-[#E6E8EC] bg-white shadow-[0_2px_8px_#1B243108]">
+      <div className="px-[18px] pt-4 pb-3">
+        <div className="text-[12.5px] text-[#5B6472]">
+          {draft.action === "create"
+            ? "Novo chamado"
+            : draft.action === "update"
+              ? "Atualização de chamado"
+              : "Reabertura de chamado"}{" "}
+          · Rascunho{" "}
+          <span className="float-right text-[#946300]">
+            ● {active ? "Aguardando confirmação" : "Concluído ou cancelado"}
+          </span>
+        </div>
+        <h3 className="mt-2 text-[18px] font-semibold leading-6">
+          {draft.title || draft.ticketId}
+        </h3>
+        <p className="mt-1 text-[13.5px] leading-5 text-[#3D4656]">
+          {draft.description}
+        </p>
+      </div>
+      {draft.action === "create" && (
+        <div className="mx-[18px] grid grid-cols-2 gap-3 border-t border-[#E6E8EC] py-3 text-[13px] sm:grid-cols-3">
+          <div>
+            <span className="block text-[#8E8E8E]">Categoria</span>
+            {draft.category}
+          </div>
+          <div>
+            <span className="block text-[#8E8E8E]">Prioridade</span>
+            {String(priority || "Média")}
+          </div>
+          <div>
+            <span className="block text-[#8E8E8E]">Afetados</span>
+            {draft.impact}
+          </div>
+        </div>
+      )}
+      {active && (
+        <div className="flex gap-2 border-t border-[#E6E8EC] bg-[#F6F7F9] px-2 py-2">
+          <Button size="sm" onClick={onConfirm}>
+            Confirmar <Check size={13} />
+          </Button>
+          <Button variant="ghost" size="sm" onClick={onCancel}>
+            Cancelar
+          </Button>
+          <span className="ml-auto self-center pr-2 text-[11px] text-[#5B6472]">
+            Nenhuma alteração sem confirmar
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+function Message({ m, analyst = false }: { m: Msg; analyst?: boolean }) {
+  const own = m.sender === "employee";
+  return (
+    <div
+      className={"flex " + (own && !analyst ? "justify-end" : "justify-start")}
+    >
+      <div
+        className={"min-w-0 max-w-[600px] " + (own && !analyst ? "" : "w-full")}
+      >
+        {(m.sender !== "agent" || analyst) && (
+          <div
+            className={
+              "mb-1 text-[12px] text-[#5B6472] " +
+              (own && !analyst ? "text-right" : "")
+            }
+          >
+            {m.sender === "employee"
+              ? "Você"
+              : m.sender === "agent"
+                ? "Nexo Assist"
+                : m.sender === "analyst"
+                  ? "Analista"
+                  : "Sistema"}{" "}
+            ·{" "}
+            {new Date(m.createdAt).toLocaleTimeString("pt-BR", {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          </div>
+        )}
         {m.sender === "agent" && <Trace raw={m.trace} />}
         <div
           className={
-            "whitespace-pre-line rounded-xl px-4 py-3 text-sm leading-6 " +
-            (own
-              ? "bg-slate-800 text-white"
+            "whitespace-pre-line rounded-[10px] px-4 py-3 text-[14.5px] leading-[1.5] " +
+            (own && !analyst
+              ? "bg-[#1B2431] text-white"
               : m.sender === "system"
-                ? "bg-slate-100 text-slate-600"
-                : "border border-slate-200 bg-white text-slate-700")
+                ? "bg-[#EDEDED] text-[#5B6472]"
+                : analyst && m.sender === "agent"
+                  ? "bg-[#E6EFFA] text-[#1B2431]"
+                  : analyst && m.sender === "analyst"
+                    ? "bg-[#E3F4EA] text-[#1B2431]"
+                    : "border border-[#E6E8EC] bg-white text-[#1B2431]")
           }
         >
           {m.body}
@@ -302,35 +613,91 @@ function Message({ m }: { m: Msg }) {
 function Shell({
   user,
   onLogout,
+  view,
+  onView,
   children,
 }: {
   user: User;
   onLogout: () => void;
+  view: "chat" | "profile";
+  onView: (view: "chat" | "profile") => void;
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex min-h-screen bg-[#f9fbfd]">
-      <aside className="hidden w-56 shrink-0 flex-col border-r border-slate-200 bg-white p-5 md:flex">
+    <div className="flex min-h-screen bg-white">
+      <aside className="hidden h-screen w-[232px] shrink-0 flex-col border-r border-[#E6E8EC] bg-white px-[14px] pb-[14px] pt-5 md:flex">
         <Logo />
-        <div className="mt-12 space-y-2">
-          <div className="rounded-lg bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700">
-            {user.role === "analyst" ? "Conversas" : "Meu chat"}
-          </div>
-          <div className="px-3 py-2 text-sm text-slate-500">
-            {user.role === "analyst" ? "Console do analista" : "Service desk"}
-          </div>
+        <div className="mt-[38px] space-y-[2px]">
+          <button
+            onClick={() => onView("chat")}
+            className={`flex h-9 w-full items-center gap-2.5 rounded-[8px] px-2.5 text-[13.5px] ${view === "chat" ? "bg-[#0285F712] font-medium text-[#0069C7]" : "text-[#3D4656] hover:bg-[#F6F7F9]"}`}
+          >
+            <MessageCircle size={16} /> Atendimento
+          </button>
+          <button
+            onClick={() => onView("profile")}
+            className={`flex h-9 w-full items-center gap-2.5 rounded-[8px] px-2.5 text-[13.5px] ${view === "profile" ? "bg-[#0285F712] font-medium text-[#0069C7]" : "text-[#3D4656] hover:bg-[#F6F7F9]"}`}
+          >
+            <UserRound size={16} /> Meu perfil
+          </button>
         </div>
-        <div className="mt-auto border-t border-slate-100 pt-5">
-          <div className="text-sm font-medium">{user.name}</div>
-          <div className="mt-1 truncate text-xs text-slate-500">
-            {user.email}
+        <div className="mt-auto border-t border-[#E6E8EC] pt-3">
+          <div className="flex items-center gap-2.5 px-2">
+            <span className="flex size-[34px] shrink-0 items-center justify-center rounded-full bg-[#0285F712] text-[12px] font-semibold text-[#0069C7]">
+              {user.name
+                .split(" ")
+                .map((x) => x[0])
+                .slice(0, 2)
+                .join("")}
+            </span>
+            <div className="min-w-0">
+              <div className="truncate text-[13px] font-semibold">
+                {user.name}
+              </div>
+              <div className="truncate text-[11px] text-[#5B6472]">
+                {user.email}
+              </div>
+            </div>
           </div>
-          <Button onClick={onLogout} variant="ghost" size="sm" className="mt-3">
-            <LogOut size={14} /> Sair
-          </Button>
+          <button
+            onClick={onLogout}
+            className="mt-3 flex h-[34px] items-center gap-2.5 rounded-[8px] px-2.5 text-[13px] text-[#3D4656] hover:bg-[#F6F7F9]"
+          >
+            <LogOut size={16} /> Sair
+          </button>
         </div>
       </aside>
       <main className="min-w-0 flex-1">{children}</main>
+    </div>
+  );
+}
+function Profile({ user }: { user: User }) {
+  return (
+    <div className="h-screen bg-white">
+      <header className="flex h-16 items-center border-b border-[#E6E8EC] px-8 text-[13px] text-[#5B6472]">
+        Service desk de TI <span className="px-2">›</span>
+        <strong className="font-medium text-[#1B2431]">Meu perfil</strong>
+      </header>
+      <div className="mx-auto max-w-[600px] px-5 pt-16">
+        <h1 className="font-display text-[36px]">Meu perfil</h1>
+        <p className="mt-1 text-[14px] text-[#5B6472]">
+          Seus dados de acesso ao service desk de TI.
+        </p>
+        <div className="mt-8 overflow-hidden rounded-[14px] border border-[#E6E8EC]">
+          <div className="grid grid-cols-[140px_1fr] border-b border-[#E6E8EC] p-4 text-[14px]">
+            <span className="text-[#5B6472]">Nome</span>
+            {user.name}
+          </div>
+          <div className="grid grid-cols-[140px_1fr] p-4 text-[14px]">
+            <span className="text-[#5B6472]">E-mail corporativo</span>
+            <span className="truncate">{user.email}</span>
+          </div>
+        </div>
+        <p className="mt-6 rounded-[14px] bg-[#F6F7F9] p-4 text-[13px] text-[#5B6472]">
+          Ambiente de demonstração: qualquer senha não vazia é aceita para os
+          usuários cadastrados.
+        </p>
+      </div>
     </div>
   );
 }
@@ -338,8 +705,10 @@ function Employee({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [state, setState] = useState<ChatState | null>(null),
     [text, setText] = useState(""),
     [busy, setBusy] = useState(false),
-    [error, setError] = useState("");
-  const bottom = useRef<HTMLDivElement>(null);
+    [error, setError] = useState(""),
+    [view, setView] = useState<"chat" | "profile">("chat");
+  const bottom = useRef<HTMLDivElement>(null),
+    inputRef = useRef<HTMLInputElement>(null);
   const load = useCallback(async () => {
     try {
       setState(await api<ChatState>("/api/chat"));
@@ -348,8 +717,8 @@ function Employee({ user, onLogout }: { user: User; onLogout: () => void }) {
     }
   }, []);
   useEffect(() => {
-    const start = setTimeout(load, 0);
-    const i = setInterval(load, 4000);
+    const start = setTimeout(load, 0),
+      i = setInterval(load, 4000);
     return () => {
       clearTimeout(start);
       clearInterval(i);
@@ -381,192 +750,226 @@ function Employee({ user, onLogout }: { user: User; onLogout: () => void }) {
     }
   }
   const c = state?.conversation;
+  const currentDraft =
+    c?.draft && c.draft !== "__processing__" ? c.draft : null;
   return (
-    <Shell user={user} onLogout={onLogout}>
-      <div className="flex h-screen flex-col">
-        <header className="flex h-16 items-center justify-between border-b border-slate-200 bg-white px-5">
-          <div>
-            <div className="font-semibold">Nexo Assist</div>
-            <div className="text-xs text-slate-500">
-              {c?.status === "agent"
-                ? "● Agente disponível"
-                : c?.status === "waiting"
-                  ? "● Aguardando analista"
-                  : "● Em atendimento humano"}
+    <Shell user={user} onLogout={onLogout} view={view} onView={setView}>
+      {view === "profile" ? (
+        <Profile user={user} />
+      ) : (
+        <div className="flex h-screen flex-col bg-white">
+          <header className="flex h-16 shrink-0 items-center justify-between border-b border-[#E6E8EC] px-5 md:px-8">
+            <div className="text-[13px] text-[#5B6472]">
+              Service desk de TI <span className="px-2">›</span>
+              <strong className="font-medium text-[#1B2431]">
+                Atendimento
+              </strong>
             </div>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => act("transfer")}
-            disabled={busy || c?.status !== "agent"}
-          >
-            <Headphones size={15} /> Falar com analista
-          </Button>
-        </header>
-        {state?.demo && (
-          <div className="border-b border-blue-100 bg-blue-50 px-5 py-2 text-center text-xs text-blue-800">
-            Modo de demonstração determinístico. Configure OPENAI_API_KEY para
-            usar o agente Mastra com IA.
-          </div>
-        )}
-        <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col">
-          <div className="flex-1 space-y-6 overflow-y-auto px-5 py-8">
-            {!state && (
-              <div className="text-center text-slate-500">
-                Carregando conversa...
-              </div>
-            )}
-            {state?.messages.length === 0 && (
-              <div className="mx-auto max-w-md py-14 text-center">
-                <div className="mx-auto flex size-12 items-center justify-center rounded-xl bg-blue-100 text-blue-600">
-                  <MessageCircle />
-                </div>
-                <h1 className="mt-5 text-2xl font-semibold">
-                  Como posso ajudar, {user.name.split(" ")[0]}?
-                </h1>
-                <p className="mt-2 text-sm leading-6 text-slate-500">
-                  Descreva seu problema de TI ou escolha uma opção para começar.
-                </p>
-                <div className="mt-7 grid gap-2 sm:grid-cols-2">
-                  {[
-                    [
-                      "Consultar meus chamados",
-                      "Quero consultar meus chamados",
-                    ],
-                    ["Abrir chamado", "Quero abrir um chamado de TI"],
-                    ["Ajuda com VPN", "Minha VPN não conecta"],
-                    ["Falar com analista", "Quero falar com um analista"],
-                  ].map(([label, q]) => (
-                    <Button
-                      key={label}
-                      variant="outline"
-                      onClick={() => act("send", undefined, q)}
-                      disabled={busy}
-                    >
-                      {label}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-            )}
-            {state?.messages.map((m) => (
-              <Message key={m.id} m={m} />
-            ))}
-            {state && state.tickets.length > 0 && state.messages.length > 0 && (
-              <div className="grid gap-2 sm:grid-cols-2">
-                {state.tickets.map((t) => (
-                  <TicketCard
-                    key={t.id}
-                    ticket={t}
-                    onClick={() => act("select", t.id)}
-                  />
-                ))}
-              </div>
-            )}
-            {c?.draft && c.status === "agent" && (
-              <div className="flex gap-2">
-                <Button onClick={() => act("confirm")} disabled={busy}>
-                  <Check size={15} /> Confirmar
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => act("cancel")}
-                  disabled={busy}
+            <div className="flex items-center gap-3">
+              {state?.demo && (
+                <span
+                  className="rounded-md bg-[#F5A50018] px-2 py-1 text-[11px] text-[#946300]"
+                  title="Classificação determinística. Configure OPENAI_API_KEY para usar Mastra com OpenAI."
                 >
-                  <X size={15} /> Cancelar
-                </Button>
-              </div>
-            )}
-            {c?.messageCount === 30 && !c.draft && c.status === "agent" && (
-              <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-center text-sm text-blue-900">
-                Esta conversa chegou ao limite de 30 mensagens.
-                <Button
-                  className="ml-3"
-                  size="sm"
-                  onClick={() => act("new")}
-                  disabled={busy}
-                >
-                  Nova conversa
-                </Button>
-              </div>
-            )}
-            {busy && (
-              <div className="text-sm text-slate-500">
-                O Nexo Assist está analisando...
-              </div>
-            )}
-            <div ref={bottom} />
-          </div>
-          <div className="border-t border-slate-200 bg-white px-5 py-4">
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (text.trim()) act("send");
-              }}
-              className="flex gap-2"
-            >
-              <input
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                disabled={
-                  busy ||
-                  (c?.status === "agent" && (c?.messageCount || 0) >= 30)
-                }
-                placeholder={
-                  c?.status !== "agent"
-                    ? "Mensagem para o analista..."
-                    : "Descreva sua dúvida ou problema de TI..."
-                }
-                className="min-w-0 flex-1 rounded-lg border border-slate-200 px-4 py-2.5 text-sm"
-              />
-              <Button
-                type="submit"
-                size="icon"
-                disabled={
-                  busy ||
-                  !text.trim() ||
-                  (c?.status === "agent" && (c?.messageCount || 0) >= 30)
-                }
-                aria-label="Enviar mensagem"
+                  Modo demo · sem LLM
+                </span>
+              )}
+              <span
+                className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[12px] ${c?.status === "agent" ? "bg-[#00BD6C14] text-[#00804A]" : "bg-[#F5A50018] text-[#946300]"}`}
               >
-                <Send size={16} />
-              </Button>
-            </form>
-            <div className="mt-2 flex justify-between text-xs text-slate-400">
-              <span>
-                {error && (
-                  <span role="alert" className="text-red-600">
-                    {error}
-                  </span>
-                )}
-              </span>
-              <span>
+                <span
+                  className={`size-[7px] rounded-full ${c?.status === "agent" ? "bg-[#00BD6C]" : "bg-[#F5A500]"}`}
+                />
                 {c?.status === "agent"
-                  ? `${c.messageCount}/30 mensagens ao agente`
-                  : "Atendimento humano"}
+                  ? "Assistente online"
+                  : c?.status === "waiting"
+                    ? "Aguardando analista"
+                    : "Analista atendendo"}
               </span>
+            </div>
+          </header>
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div className="flex-1 space-y-5 overflow-y-auto px-5 pb-4 pt-7 lg:px-[clamp(24px,14vw,200px)]">
+              {!state && (
+                <p className="text-[14px] text-[#5B6472]">
+                  Carregando conversa...
+                </p>
+              )}
+              {state?.messages.length === 0 && (
+                <div className="mx-auto max-w-[600px] pt-16">
+                  <div className="font-display text-[32px]">
+                    Como posso ajudar, {user.name.split(" ")[0]}?
+                  </div>
+                  <p className="mt-2 text-[14px] text-[#5B6472]">
+                    Descreva sua dúvida ou problema de TI.
+                  </p>
+                  <div className="mt-6 flex flex-wrap gap-2">
+                    {[
+                      [
+                        "Consultar meus chamados",
+                        "Quero consultar meus chamados",
+                      ],
+                      ["Abrir chamado", "Quero abrir um chamado de TI"],
+                      ["Ajuda com VPN", "Minha VPN não conecta"],
+                      ["Falar com analista", "Quero falar com um analista"],
+                    ].map(([label, q]) => (
+                      <Button
+                        key={label}
+                        variant="outline"
+                        size="sm"
+                        onClick={() => act("send", undefined, q)}
+                        disabled={busy}
+                      >
+                        {label}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {state?.messages.map((m) => {
+                const trace = traceOf(m.trace),
+                  draft = trace.draft as DraftView | null,
+                  ticket = trace.ticket as TicketData | undefined;
+                const active = !!(
+                  draft &&
+                  currentDraft &&
+                  JSON.stringify(draft) === currentDraft &&
+                  c?.status === "agent"
+                );
+                return (
+                  <div key={m.id}>
+                    <Message m={m} />
+                    {m.sender === "agent" &&
+                      trace.intent === "list" &&
+                      !ticket &&
+                      m.body.includes("Selecione") && (
+                        <TicketSelector
+                          tickets={state.tickets}
+                          onSelect={
+                            c?.status === "agent"
+                              ? (id) => act("select", id)
+                              : undefined
+                          }
+                        />
+                      )}{" "}
+                    {m.sender === "agent" && ticket && (
+                      <TicketDetail
+                        ticket={ticket}
+                        onTransfer={
+                          c?.status === "agent"
+                            ? () => act("transfer")
+                            : undefined
+                        }
+                        onAddInfo={() => {
+                          setText(`Atualizar chamado ${ticket.id}: `);
+                          inputRef.current?.focus();
+                        }}
+                      />
+                    )}
+                    {m.sender === "agent" && draft && (
+                      <DraftCard
+                        draft={draft}
+                        priority={trace.priority}
+                        active={active}
+                        onConfirm={() => act("confirm")}
+                        onCancel={() => act("cancel")}
+                      />
+                    )}
+                  </div>
+                );
+              })}
+              {c?.status === "agent" && c?.messageCount === 30 && !c.draft && (
+                <div className="max-w-[600px] rounded-[10px] border border-[#E6E8EC] p-4 text-[13px]">
+                  Esta conversa chegou ao limite de 30 mensagens.{" "}
+                  <Button
+                    size="sm"
+                    className="ml-2"
+                    onClick={() => act("new")}
+                    disabled={busy}
+                  >
+                    Nova conversa
+                  </Button>
+                </div>
+              )}
+              {busy && (
+                <div className="text-[13px] text-[#5B6472]">
+                  Nexo Assist está analisando...
+                </div>
+              )}
+              <div ref={bottom} />
+            </div>
+            <div className="shrink-0 border-t border-[#E6E8EC] bg-white px-5 pb-[18px] pt-[10px] lg:px-[clamp(24px,14vw,200px)]">
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (text.trim()) act("send");
+                }}
+                className="flex h-12 items-center gap-2 rounded-[10px] border border-[#E6E8EC] bg-white px-1.5 pl-4"
+              >
+                <input
+                  ref={inputRef}
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                  disabled={
+                    busy ||
+                    (c?.status === "agent" && (c?.messageCount || 0) >= 30)
+                  }
+                  placeholder={
+                    c?.status === "agent"
+                      ? "Escreva para o Nexo…"
+                      : "Mensagem para o analista…"
+                  }
+                  className="min-w-0 flex-1 border-0 bg-transparent text-[14.5px] shadow-none!"
+                />
+                <Button
+                  type="submit"
+                  disabled={
+                    busy ||
+                    !text.trim() ||
+                    (c?.status === "agent" && (c?.messageCount || 0) >= 30)
+                  }
+                  className="h-9 rounded-[7px] bg-[#0062C4] px-3 text-[13.5px]"
+                >
+                  <Send size={14} /> Enviar
+                </Button>
+              </form>
+              <div className="mt-1.5 flex justify-between text-[12px] text-[#5B6472]">
+                <span className="text-[#C4161D]" role="alert">
+                  {error}
+                </span>
+                <span>
+                  {c?.status === "agent"
+                    ? `${c.messageCount}/30 mensagens nesta sessão`
+                    : "Atendimento humano"}
+                </span>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
     </Shell>
   );
 }
 function Analyst({ user, onLogout }: { user: User; onLogout: () => void }) {
-  const [list, setList] = useState<(Conversation & { employee: string })[]>([]),
+  const [list, setList] = useState<
+      (Conversation & { employee: string; preview?: string })[]
+    >([]),
     [id, setId] = useState<string | null>(null),
     [detail, setDetail] = useState<
       (ChatState & { conversation: Conversation & { employee: string } }) | null
     >(null),
     [filter, setFilter] = useState("all"),
+    [search, setSearch] = useState(""),
     [text, setText] = useState(""),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   const load = useCallback(async () => {
     try {
       const v = await api<{
-        conversations: (Conversation & { employee: string })[];
+        conversations: (Conversation & {
+          employee: string;
+          preview?: string;
+        })[];
         conversation: Conversation & { employee: string };
         messages: Msg[];
         tickets: TicketData[];
@@ -578,8 +981,8 @@ function Analyst({ user, onLogout }: { user: User; onLogout: () => void }) {
     }
   }, [id]);
   useEffect(() => {
-    const start = setTimeout(load, 0);
-    const i = setInterval(load, 4000);
+    const start = setTimeout(load, 0),
+      i = setInterval(load, 4000);
     return () => {
       clearTimeout(start);
       clearInterval(i);
@@ -599,146 +1002,326 @@ function Analyst({ user, onLogout }: { user: User; onLogout: () => void }) {
       setBusy(false);
     }
   }
-  const filtered = list.filter((x) => filter === "all" || x.status === filter);
+  const waiting = list.filter((c) => c.status === "waiting").length;
+  const filtered = list.filter(
+    (c) =>
+      (filter === "all" ||
+        (filter === "mine" && c.analystId === user.id) ||
+        filter === c.status) &&
+      (!search ||
+        c.employee.toLowerCase().includes(search.toLowerCase()) ||
+        c.id.toLowerCase().includes(search.toLowerCase())),
+  );
+  const current = detail?.conversation,
+    tickets = detail?.tickets || [];
   return (
-    <Shell user={user} onLogout={onLogout}>
-      <div className="flex h-screen flex-col">
-        <header className="flex h-16 items-center justify-between border-b border-slate-200 bg-white px-5">
-          <div>
-            <h1 className="font-semibold">Conversas</h1>
-            <p className="text-xs text-slate-500">
-              Console do analista ·{" "}
-              {list.filter((x) => x.status === "waiting").length} aguardando
-            </p>
+    <div className="flex h-screen bg-[#F6F7F9] text-[#1B2431]">
+      <aside className="hidden w-16 shrink-0 flex-col items-center gap-2 border-r border-[#E6E8EC] bg-[#F6F7F9] py-4 sm:flex">
+        <div className="flex size-10 items-center justify-center">
+          <NexoMark size={24} />
+        </div>
+        <button
+          title="Conversas"
+          className="relative flex size-10 items-center justify-center rounded-[10px] bg-white text-[#1B2431]"
+        >
+          <MessageCircle size={19} />
+          {waiting > 0 && (
+            <span className="absolute -right-1 -top-1 rounded-full bg-[#0062C4] px-1 text-[10px] text-white">
+              {waiting}
+            </span>
+          )}
+        </button>
+        <div className="flex-1" />
+        <div
+          className="flex size-9 items-center justify-center rounded-full bg-[#0285F712] text-[12px] font-semibold text-[#0069C7]"
+          title={user.name}
+        >
+          {user.name
+            .split(" ")
+            .map((x) => x[0])
+            .slice(0, 2)
+            .join("")}
+        </div>
+        <button
+          onClick={onLogout}
+          title="Sair"
+          aria-label="Sair"
+          className="mt-1 flex size-9 items-center justify-center text-[#5B6472]"
+        >
+          <LogOut size={17} />
+        </button>
+      </aside>
+      <aside
+        className={`w-full shrink-0 border-r border-[#E6E8EC] bg-white lg:w-[380px] ${id ? "hidden lg:flex" : "flex"} flex-col`}
+      >
+        <div className="border-b border-[#E6E8EC] px-4 pb-[10px] pt-4">
+          <div className="flex items-center justify-between gap-2">
+            <h1 className="text-[20px] font-semibold">Conversas</h1>
+            <span className="rounded-full bg-[#00BD6C14] px-2.5 py-1 text-[11px] text-[#00804A]">
+              ● Disponível
+            </span>
           </div>
-          <Button variant="outline" size="sm" onClick={load}>
-            Atualizar
-          </Button>
-        </header>
-        <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)_260px]">
-          <aside className="overflow-y-auto border-r border-slate-200 bg-white">
-            <div className="p-3">
-              <select
-                value={filter}
-                onChange={(e) => setFilter(e.target.value)}
-                className="w-full rounded-lg border border-slate-200 p-2 text-sm"
-              >
-                <option value="all">Todas</option>
-                <option value="waiting">Aguardando</option>
-                <option value="analyst">Em atendimento</option>
-                <option value="agent">Com agente</option>
-                <option value="closed">Encerradas</option>
-              </select>
-            </div>
-            {filtered.length === 0 && (
-              <p className="p-4 text-sm text-slate-500">
-                Nenhuma conversa neste filtro.
-              </p>
-            )}
-            {filtered.map((c) => (
+          <div className="relative mt-3">
+            <Search
+              className="absolute left-3 top-2.5 text-[#5B6472]"
+              size={15}
+            />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Pesquisar conversa"
+              className="h-9 w-full rounded-[8px] bg-[#F6F7F9] pl-9 pr-3 text-[13px]"
+            />
+          </div>
+          <div className="mt-3 flex gap-1 overflow-x-auto pb-1">
+            {[
+              ["all", "Todas"],
+              ["waiting", "Precisam de você"],
+              ["agent", "Com o agent"],
+              ["mine", "Minhas"],
+              ["closed", "Encerradas"],
+            ].map(([value, label]) => (
               <button
-                key={c.id}
-                onClick={() => setId(c.id)}
-                className={
-                  "w-full border-b border-slate-100 p-4 text-left hover:bg-blue-50 " +
-                  (id === c.id ? "bg-blue-50" : "")
-                }
+                key={value}
+                onClick={() => setFilter(value)}
+                className={`shrink-0 rounded-[7px] px-2.5 py-1.5 text-[12px] ${filter === value ? "bg-[#0285F712] font-semibold text-[#0069C7]" : "bg-[#F6F7F9] text-[#3D4656]"}`}
               >
-                <div className="font-medium">{c.employee}</div>
-                <div className="mt-1 text-xs text-slate-500">
+                {label}
+                {value === "waiting" && waiting > 0 ? ` ${waiting}` : ""}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-2">
+          {filtered.length === 0 && (
+            <p className="p-4 text-[13px] text-[#5B6472]">
+              Nenhuma conversa neste filtro.
+            </p>
+          )}
+          {filtered.map((c) => (
+            <button
+              key={c.id}
+              onClick={() => setId(c.id)}
+              className={`flex w-full gap-3 rounded-[10px] p-2.5 text-left hover:bg-[#F6F7F9] ${id === c.id ? "bg-[#F6F7F9]" : ""}`}
+            >
+              <span className="flex size-[46px] shrink-0 items-center justify-center rounded-full bg-[#DCE9F7] text-[13px] font-semibold text-[#0062C4]">
+                {c.employee
+                  .split(" ")
+                  .map((x) => x[0])
+                  .slice(0, 2)
+                  .join("")}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="flex justify-between gap-2">
+                  <strong className="truncate text-[14px]">{c.employee}</strong>
+                  <small className="shrink-0 text-[11px] text-[#8E8E8E]">
+                    {new Date(c.updatedAt).toLocaleTimeString("pt-BR", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </small>
+                </span>
+                <span className="mt-1 block truncate text-[12px] text-[#5B6472]">
+                  {c.preview || "Conversa iniciada"}
+                </span>
+                <span
+                  className={`mt-1 block text-[11px] ${c.status === "waiting" ? "text-[#C4161D]" : c.status === "analyst" ? "text-[#00804A]" : "text-[#5B6472]"}`}
+                >
+                  ●{" "}
                   {c.status === "waiting"
-                    ? "Aguardando analista"
+                    ? "Aguardando atendimento"
                     : c.status === "analyst"
                       ? "Em atendimento"
                       : c.status === "agent"
-                        ? "Com agente"
+                        ? "Com o agent"
                         : "Encerrada"}
-                </div>
-              </button>
-            ))}
-          </aside>
-          <section className="flex min-h-0 flex-col">
-            <div className="flex-1 space-y-5 overflow-y-auto p-5">
-              {!id && (
-                <div className="pt-20 text-center text-slate-500">
-                  Selecione uma conversa para começar.
-                </div>
-              )}
-              {detail?.messages.map((m) => (
-                <Message key={m.id} m={m} />
-              ))}
-            </div>
-            {detail && (
-              <div className="border-t border-slate-200 bg-white p-4">
-                <div className="mb-3 flex flex-wrap gap-2">
-                  {detail.conversation.status === "waiting" && (
-                    <Button onClick={() => act("assume")} disabled={busy}>
-                      <Headphones size={15} /> Assumir conversa
-                    </Button>
-                  )}
-                  {detail.conversation.status === "analyst" &&
-                    detail.conversation.analystId === user.id && (
-                      <>
-                        <Button
-                          variant="outline"
-                          onClick={() => act("return")}
-                          disabled={busy}
-                        >
-                          <ArrowLeft size={15} /> Devolver ao agente
-                        </Button>
-                        <Button
-                          variant="outline"
-                          onClick={() => act("close")}
-                          disabled={busy}
-                        >
-                          Encerrar atendimento
-                        </Button>
-                      </>
-                    )}
-                </div>
-                {detail.conversation.status === "analyst" &&
-                  detail.conversation.analystId === user.id && (
-                    <form
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        act("reply");
-                      }}
-                      className="flex gap-2"
-                    >
-                      <input
-                        value={text}
-                        onChange={(e) => setText(e.target.value)}
-                        placeholder="Responder como analista..."
-                        className="min-w-0 flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                      />
-                      <Button type="submit" disabled={!text.trim() || busy}>
-                        <Send size={15} />
-                      </Button>
-                    </form>
-                  )}
-                {error && (
-                  <p role="alert" className="mt-2 text-xs text-red-600">
-                    {error}
-                  </p>
-                )}
-              </div>
-            )}
-          </section>
-          <aside className="hidden overflow-y-auto border-l border-slate-200 bg-white p-4 lg:block">
-            <h2 className="font-semibold">Chamados do funcionário</h2>
-            <p className="mt-1 text-xs text-slate-500">Contexto da conversa</p>
-            <div className="mt-5 space-y-2">
-              {detail?.tickets.map((t) => (
-                <TicketCard key={t.id} ticket={t} />
-              ))}
-              {detail?.tickets.length === 0 && (
-                <p className="text-sm text-slate-500">Nenhum chamado.</p>
-              )}
-            </div>
-          </aside>
+                </span>
+              </span>
+            </button>
+          ))}
         </div>
-      </div>
-    </Shell>
+      </aside>
+      <section
+        className={`min-w-0 flex-1 flex-col bg-[#EEF1F5] ${id ? "flex" : "hidden lg:flex"}`}
+      >
+        {current ? (
+          <>
+            <header className="flex h-16 shrink-0 items-center gap-3 border-b border-[#E6E8EC] bg-white px-5">
+              <button
+                onClick={() => setId(null)}
+                className="lg:hidden"
+                aria-label="Voltar"
+              >
+                <ArrowLeft size={18} />
+              </button>
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[#DCE9F7] text-[12px] font-semibold text-[#0062C4]">
+                {current.employee
+                  .split(" ")
+                  .map((x) => x[0])
+                  .slice(0, 2)
+                  .join("")}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[14px] font-semibold">
+                  {current.employee}
+                </div>
+                <div className="text-[12px] text-[#5B6472]">
+                  {current.status === "waiting"
+                    ? "aguardando atendimento"
+                    : current.status === "analyst"
+                      ? "atendimento humano"
+                      : "com o agent"}
+                </div>
+              </div>
+              {current.status === "analyst" &&
+                current.analystId === user.id && (
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => act("return")}
+                      disabled={busy}
+                    >
+                      Devolver ao agent
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => act("close")}
+                      disabled={busy}
+                    >
+                      Encerrar atendimento
+                    </Button>
+                  </>
+                )}
+            </header>
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-5 lg:px-10">
+              {detail?.messages.map((m) => (
+                <Message key={m.id} m={m} analyst />
+              ))}
+            </div>
+            <div className="shrink-0 border-t border-[#E6E8EC] bg-white px-5 py-3 lg:px-5">
+              {current.status === "waiting" && (
+                <div className="mb-2 flex items-center gap-3 rounded-[9px] bg-[#F5A50018] p-2.5">
+                  <Headphones size={18} className="text-[#946300]" />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[13px] font-semibold">
+                      Aguardando atendimento humano
+                    </div>
+                    <div className="text-[12px] text-[#5B6472]">
+                      O agente está pausado. Assuma a conversa para responder.
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={() => act("assume")}
+                    disabled={busy}
+                  >
+                    Assumir atendimento
+                  </Button>
+                </div>
+              )}
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (text.trim()) act("reply");
+                }}
+                className="flex h-11 gap-2"
+              >
+                <input
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                  disabled={
+                    current.status !== "analyst" ||
+                    current.analystId !== user.id ||
+                    busy
+                  }
+                  placeholder={
+                    current.status === "analyst"
+                      ? "Escreva uma resposta…"
+                      : "Assuma o atendimento para responder…"
+                  }
+                  className="min-w-0 flex-1 rounded-[9px] border border-[#E6E8EC] bg-[#F6F7F9] px-3 text-[13px]"
+                />
+                <Button
+                  type="submit"
+                  size="icon"
+                  disabled={
+                    !text.trim() ||
+                    busy ||
+                    current.status !== "analyst" ||
+                    current.analystId !== user.id
+                  }
+                  aria-label="Enviar resposta"
+                >
+                  <Send size={16} />
+                </Button>
+              </form>
+              {error && (
+                <p role="alert" className="mt-1 text-xs text-[#C4161D]">
+                  {error}
+                </p>
+              )}
+            </div>
+          </>
+        ) : (
+          <div className="flex h-full items-center justify-center text-[14px] text-[#5B6472]">
+            Selecione uma conversa para começar.
+          </div>
+        )}
+      </section>
+      <aside className="hidden w-[340px] shrink-0 flex-col border-l border-[#E6E8EC] bg-white xl:flex">
+        <div className="flex h-16 shrink-0 flex-col justify-center border-b border-[#E6E8EC] px-5">
+          <h2 className="text-[14px] font-semibold">
+            Chamados{" "}
+            {current
+              ? `de ${current.employee.split(" ")[0]}`
+              : "do funcionário"}
+          </h2>
+          <p className="text-[12px] text-[#5B6472]">
+            {
+              tickets.filter(
+                (t) => !["Resolvido", "Fechado", "Aprovado"].includes(t.status),
+              ).length
+            }{" "}
+            abertos ·{" "}
+            {
+              tickets.filter((t) =>
+                ["Resolvido", "Fechado", "Aprovado"].includes(t.status),
+              ).length
+            }{" "}
+            encerrados
+          </p>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-6">
+          {tickets.length > 0 && (
+            <>
+              <h3 className="mb-3 text-[12px] text-[#5B6472]">
+                Desta conversa
+              </h3>
+              <TicketCard ticket={tickets[tickets.length - 1]} />
+              <h3 className="mb-1 mt-8 text-[12px] text-[#5B6472]">
+                Outros chamados
+              </h3>
+              {tickets.slice(0, -1).map((t) => (
+                <div key={t.id} className="border-b border-[#E6E8EC] py-3">
+                  <div className="flex justify-between text-[12px]">
+                    <span className="font-medium text-[#0069C7]">{t.id}</span>
+                    <span className="text-[#5B6472]">{t.status}</span>
+                  </div>
+                  <div className="mt-1 text-[13px]">{t.title}</div>
+                </div>
+              ))}
+            </>
+          )}
+          {tickets.length === 0 && (
+            <p className="text-[13px] text-[#5B6472]">
+              Nenhum chamado para esta conversa.
+            </p>
+          )}
+        </div>
+      </aside>
+    </div>
   );
 }
 export default function App() {
