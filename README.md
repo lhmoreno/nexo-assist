@@ -16,15 +16,25 @@ pnpm dev
 
 Abra <http://localhost:3000>. Para avaliar sem uma chave, defina `DEMO_MODE=true` em `.env.local`. A interface indica claramente esse modo. Ele usa classificação determinística limitada e serve apenas para percorrer os fluxos; com uma chave, a classificação e a seleção de ferramentas são feitas pelo agente Mastra.
 
-Capturas do modo de desenvolvimento: [login](docs/screenshots/login.webp), [chat do funcionário](docs/screenshots/chat-funcionario.webp) e [console do analista](docs/screenshots/console-analista.webp). Elas mostram dados de demonstração e o aviso do modo sem LLM.
+Capturas reais do servidor em desenvolvimento, correspondentes aos cinco estados principais do Pen:
 
-| Papel | E-mail | Senha |
-| --- | --- | --- |
-| Funcionária | `ana.paula@nexo.com` | Qualquer texto não vazio |
-| Funcionário | `bruno.lima@nexo.com` | Qualquer texto não vazio |
-| Analista | `joao.martins@nexo.com` | Qualquer texto não vazio |
+| Tela                             | Captura                                                          |
+| -------------------------------- | ---------------------------------------------------------------- |
+| Identificação                    | [login](docs/screenshots/login.webp)                             |
+| Chat · novo chamado              | [rascunho e confirmação](docs/screenshots/chat-funcionario.webp) |
+| Chat · consulta e transferência  | [seleção de chamados](docs/screenshots/chat-consulta.webp)       |
+| Atendente · conversas            | [fila e chamados](docs/screenshots/console-analista.webp)        |
+| Atendente · atendimento assumido | [resposta humana](docs/screenshots/atendimento-assumido.webp)    |
 
-O seed é idempotente. O banco fica em `data/nexo.sqlite`, ignorado pelo Git. Para reiniciar os dados de demonstração, pare a aplicação, remova o arquivo SQLite e execute `pnpm setup`.
+A interface segue as dimensões, paleta, fontes, marca, composição e componentes inspecionados no arquivo Pen. O texto e os dados exibidos vêm do seed e dos fluxos reais, por isso podem diferir dos exemplos estáticos do protótipo. O painel de decisões e o aviso de modo demo acrescentam informações exigidas pelo desafio.
+
+| Papel       | E-mail                  | Senha                    |
+| ----------- | ----------------------- | ------------------------ |
+| Funcionária | `ana.paula@nexo.com`    | Qualquer texto não vazio |
+| Funcionário | `bruno.lima@nexo.com`   | Qualquer texto não vazio |
+| Analista    | `joao.martins@nexo.com` | Qualquer texto não vazio |
+
+O seed é idempotente. O banco fica em `data/nexo.sqlite`, ignorado pelo Git. Para reiniciar os dados de demonstração, pare a aplicação, remova o arquivo SQLite e execute `pnpm setup`. O SQLite usa journal de rollback para manter as gravações estáveis durante reinícios do servidor de desenvolvimento.
 
 ## Arquitetura
 
