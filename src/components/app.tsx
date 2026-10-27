@@ -11,6 +11,11 @@ import {
   Send,
   UserRound,
   Search,
+  Mail,
+  LockKeyhole,
+  Eye,
+  EyeOff,
+  X,
 } from "lucide-react";
 import { Button } from "./ui/button";
 type User = {
@@ -97,8 +102,41 @@ function Logo({ dark = false }: { dark?: boolean }) {
 function Login({ onLogin }: { onLogin: (u: User) => void }) {
   const [email, setEmail] = useState("ana.paula@nexo.com"),
     [password, setPassword] = useState("demo"),
+    [remember, setRemember] = useState(true),
+    [showPassword, setShowPassword] = useState(false),
+    [dialog, setDialog] = useState<"privacy" | "password" | null>(null),
+    [metrics, setMetrics] = useState<{
+      firstResponseSeconds: number | null;
+      resolvedWithoutQueuePercent: number | null;
+      analystsOnline: number;
+    } | null>(null),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
+  useEffect(() => {
+    let active = true;
+    const loadMetrics = async () => {
+      try {
+        const next = await api<NonNullable<typeof metrics>>("/api/metrics");
+        if (active) setMetrics(next);
+      } catch {
+        if (active) setMetrics(null);
+      }
+    };
+    void loadMetrics();
+    const timer = setInterval(loadMetrics, 15000);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, []);
+  const firstResponse =
+    metrics?.firstResponseSeconds == null
+      ? "—"
+      : metrics.firstResponseSeconds === 0
+        ? "<1 s"
+        : metrics.firstResponseSeconds < 60
+          ? `${metrics.firstResponseSeconds} s`
+          : `${Math.round(metrics.firstResponseSeconds / 60)} min`;
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
@@ -107,6 +145,7 @@ function Login({ onLogin }: { onLogin: (u: User) => void }) {
       const r = await api<{ user: User }>("/api/auth", "POST", {
         email,
         password,
+        remember,
       });
       onLogin(r.user);
     } catch (e) {
@@ -138,41 +177,46 @@ function Login({ onLogin }: { onLogin: (u: User) => void }) {
             <div className="mt-3 text-[12px] font-semibold text-white/80">
               Nexo Assist{" "}
               <span className="ml-2 font-normal text-white/45">
-                consultou seus chamados · preparou um rascunho
+                consultou seus chamados · criou um chamado
               </span>
             </div>
             <div className="mt-1 rounded-[8px] bg-white/10 p-3 text-[13px] leading-5 text-white">
-              Encontrei uma orientação para o erro 809. Posso preparar um
-              chamado para você confirmar.
+              Pronto: abri o chamado com prioridade alta. Um analista fala com
+              você em até 4 h úteis.
             </div>
-            <div className="mt-2 rounded-[8px] bg-white px-3 py-2 text-[12px] text-[#3D4656]">
-              Rede e VPN · confira os dados antes de criar
+            <div className="mt-2 inline-flex items-center gap-2 rounded-[8px] bg-white px-3 py-2 text-[12px] text-[#3D4656]">
+              <span className="size-[7px] rounded-full bg-[#00BD6C]" />
+              <strong className="text-[#1B2431]">INC-20517</strong>
+              Rede e VPN · Alta · em até 4 h
             </div>
           </div>
         </div>
         <div className="grid grid-cols-3 gap-4 border-t border-white/15 pt-6">
           <div>
             <strong className="font-display block text-[32px] leading-none">
-              24h
+              {firstResponse}
             </strong>
-            <span className="mt-1 block text-[12px] text-white/55">
-              plantão para casos críticos
+            <span className="mt-1 block text-[13.5px] text-white/55">
+              primeira resposta, em média
             </span>
           </div>
           <div className="border-l border-white/15 pl-5">
             <strong className="font-display block text-[32px] leading-none">
-              8
+              {metrics?.resolvedWithoutQueuePercent == null
+                ? "—"
+                : `${metrics.resolvedWithoutQueuePercent}%`}
             </strong>
-            <span className="mt-1 block text-[12px] text-white/55">
-              artigos de ajuda no seed
+            <span className="mt-1 block text-[13.5px] text-white/55">
+              resolvidos sem fila
             </span>
           </div>
           <div className="border-l border-white/15 pl-5">
-            <strong className="font-display block text-[32px] leading-none">
-              2
+            <strong className="font-display flex items-center gap-2 text-[32px] leading-none">
+              {metrics?.analystsOnline ?? "—"}
+              <span className="size-2 rounded-full bg-[#00BD6C]" />
             </strong>
-            <span className="mt-1 block text-[12px] text-white/55">
-              analistas de exemplo
+            <span className="mt-1 block text-[13.5px] text-white/55">
+              analistas online agora
             </span>
           </div>
         </div>
@@ -193,29 +237,63 @@ function Login({ onLogin }: { onLogin: (u: User) => void }) {
           <div className="mt-7 space-y-[18px]">
             <label className="block text-[13.5px] font-medium">
               E-mail corporativo
-              <input
-                autoComplete="username"
-                className="mt-2 h-11 w-full rounded-[10px] border border-[#E6E8EC] px-3 text-[14.5px]"
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
+              <span className="relative mt-2 block">
+                <Mail
+                  size={16}
+                  className="pointer-events-none absolute left-3.5 top-3.5 text-[#5B6472]"
+                />
+                <input
+                  autoComplete="username"
+                  className="h-11 w-full rounded-[8px] border border-[#E6E8EC] pl-10 pr-3 text-[14.5px]"
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+              </span>
             </label>
-            <label className="block text-[13.5px] font-medium">
-              Senha
-              <input
-                autoComplete="current-password"
-                className="mt-2 h-11 w-full rounded-[10px] border border-[#E6E8EC] px-3 text-[14.5px]"
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </label>
+            <div className="text-[13.5px] font-medium">
+              <div className="flex items-center justify-between">
+                <label htmlFor="nexo-password">Senha</label>
+                <button
+                  type="button"
+                  className="text-[#0062C4]"
+                  onClick={() => setDialog("password")}
+                >
+                  Esqueci minha senha
+                </button>
+              </div>
+              <div className="relative mt-2">
+                <LockKeyhole
+                  size={16}
+                  className="pointer-events-none absolute left-3.5 top-3.5 text-[#0062C4]"
+                />
+                <input
+                  id="nexo-password"
+                  autoComplete="current-password"
+                  className="h-11 w-full rounded-[8px] border border-[#E6E8EC] pl-10 pr-11 text-[14.5px]"
+                  type={showPassword ? "text" : "password"}
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+                <button
+                  type="button"
+                  aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-2 top-2 flex size-[30px] items-center justify-center rounded-md text-[#5B6472] hover:bg-[#F6F7F9]"
+                >
+                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+            </div>
             <label className="flex items-center gap-2 text-[13px] text-[#3D4656]">
-              <input type="checkbox" defaultChecked /> Manter conectado neste
-              computador
+              <input
+                type="checkbox"
+                checked={remember}
+                onChange={(e) => setRemember(e.target.checked)}
+              />{" "}
+              Manter conectado neste computador
             </label>
           </div>
           {error && (
@@ -230,31 +308,80 @@ function Login({ onLogin }: { onLogin: (u: User) => void }) {
           >
             {busy ? "Entrando..." : "Entrar"} <ArrowRight size={16} />
           </Button>
-          <p className="mt-5 border-t border-[#E6E8EC] pt-4 text-xs leading-5 text-[#5B6472]">
-            Demonstração: qualquer senha não vazia. Selecione um perfil:
-          </p>
-          <div className="mt-2 flex gap-3 text-xs">
-            <button
-              type="button"
-              className="text-[#0069C7] underline"
-              onClick={() => setEmail("ana.paula@nexo.com")}
-            >
-              Funcionária
-            </button>
-            <button
-              type="button"
-              className="text-[#0069C7] underline"
-              onClick={() => setEmail("joao.martins@nexo.com")}
-            >
-              Analista
-            </button>
-          </div>
+          <div className="mt-5 border-t border-[#E6E8EC] pt-4" />
         </form>
         <div className="flex justify-between gap-2 text-[12px] text-[#5B6472]">
           <span>© 2026 Nexo · Service desk de TI</span>
-          <span>Dados de demonstração</span>
+          <button
+            type="button"
+            onClick={() => setDialog("privacy")}
+            className="hover:text-[#0062C4] hover:underline"
+          >
+            Privacidade e uso de dados
+          </button>
         </div>
       </section>
+      {dialog && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[#1B2431]/55 p-5"
+          onClick={() => setDialog(null)}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-label={
+              dialog === "privacy"
+                ? "Privacidade e uso de dados"
+                : "Ajuda com a senha"
+            }
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-[460px] rounded-[14px] bg-white p-6 text-[#1B2431] shadow-xl"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <h2 className="font-display text-[28px]">
+                {dialog === "privacy"
+                  ? "Privacidade e uso de dados"
+                  : "Ajuda com a senha"}
+              </h2>
+              <button
+                type="button"
+                aria-label="Fechar"
+                onClick={() => setDialog(null)}
+              >
+                <X size={20} />
+              </button>
+            </div>
+            {dialog === "privacy" ? (
+              <div className="mt-4 space-y-3 text-[14px] leading-6 text-[#3D4656]">
+                <p>
+                  Esta demonstração guarda usuários, conversas e chamados em
+                  SQLite local. Cada funcionário só pode consultar e alterar
+                  seus próprios chamados.
+                </p>
+                <p>
+                  A sessão usa um cookie protegido contra leitura por
+                  JavaScript. Ao sair, a sessão é revogada. Quando configurado,
+                  o modelo de IA recebe a mensagem e o contexto recente
+                  necessários para responder; a chave fica somente no servidor.
+                </p>
+              </div>
+            ) : (
+              <p className="mt-4 text-[14px] leading-6 text-[#3D4656]">
+                Neste ambiente de demonstração, os usuários de exemplo entram
+                com qualquer senha não vazia. Não há redefinição de senha; em
+                produção, a autenticação seria feita pelo provedor corporativo.
+              </p>
+            )}
+            <Button
+              type="button"
+              className="mt-6"
+              onClick={() => setDialog(null)}
+            >
+              Entendi
+            </Button>
+          </section>
+        </div>
+      )}
     </div>
   );
 }

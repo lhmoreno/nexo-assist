@@ -12,6 +12,12 @@ export const sessions = sqliteTable("sessions", {
     .references(() => users.id),
   expiresAt: integer("expires_at").notNull(),
 });
+export const analystPresence = sqliteTable("analyst_presence", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => users.id),
+  lastSeenAt: integer("last_seen_at").notNull(),
+});
 export const conversations = sqliteTable("conversations", {
   id: text("id").primaryKey(),
   userId: text("user_id")
@@ -56,6 +62,16 @@ export const tickets = sqliteTable("tickets", {
   updatedAt: integer("updated_at").notNull(),
   createdAt: integer("created_at").notNull(),
   idempotencyKey: text("idempotency_key").unique(),
+});
+export const ticketOperations = sqliteTable("ticket_operations", {
+  key: text("key").primaryKey(),
+  ownerId: text("owner_id")
+    .notNull()
+    .references(() => users.id),
+  ticketId: text("ticket_id")
+    .notNull()
+    .references(() => tickets.id),
+  duplicate: integer("duplicate", { mode: "boolean" }).notNull(),
 });
 export const articles = sqliteTable("articles", {
   id: text("id").primaryKey(),

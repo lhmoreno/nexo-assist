@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "./db";
-import { tickets } from "./schema";
+import { ticketOperations, tickets } from "./schema";
 import {
   canReopen,
   dueAt,
@@ -49,49 +49,102 @@ export const ticketService = {
     urgency: Urgency;
     key: string;
   }) {
-    return legacy(() => {
-      const existing = db
-        .select()
-        .from(tickets)
-        .where(eq(tickets.ownerId, input.ownerId))
-        .all();
-      const same = existing.find((t) => t.idempotencyKey === input.key);
-      if (same) return { ticket: same, duplicate: false };
-      const duplicate = duplicateOf(
-        input.title + " " + input.description,
-        existing,
-      );
-      if (duplicate)
+    return legacy(() =>
+      db.transaction((tx) => {
+        const prior = tx
+          .select()
+          .from(ticketOperations)
+          .where(eq(ticketOperations.key, input.key))
+          .get();
+        if (prior) {
+          if (prior.ownerId !== input.ownerId)
+            throw new TicketError("Operação não autorizada.");
+          return {
+            ticket: tx
+              .select()
+              .from(tickets)
+              .where(eq(tickets.id, prior.ticketId))
+              .get()!,
+            duplicate: prior.duplicate,
+          };
+        }
+        const existing = tx
+          .select()
+          .from(tickets)
+          .where(eq(tickets.ownerId, input.ownerId))
+          .all();
+        const same = existing.find((t) => t.idempotencyKey === input.key);
+        if (same) return { ticket: same, duplicate: false };
+        const duplicate = duplicateOf(
+          input.title + " " + input.description,
+          existing,
+        );
+        if (duplicate) {
+          const current = existing.find((t) => t.id === duplicate)!;
+          const now = Date.now();
+          tx.update(tickets)
+            .set({
+              description: `${current.description}\nAtualização: ${input.description}`,
+              updatedAt: now,
+              dueAt: dueAt(
+                new Date(now),
+                current.priority as "Crítica" | "Alta" | "Média" | "Baixa",
+              ).getTime(),
+            })
+            .where(eq(tickets.id, duplicate))
+            .run();
+          tx.insert(ticketOperations)
+            .values({
+              key: input.key,
+              ownerId: input.ownerId,
+              ticketId: duplicate,
+              duplicate: true,
+            })
+            .run();
+          return {
+            ticket: tx
+              .select()
+              .from(tickets)
+              .where(eq(tickets.id, duplicate))
+              .get()!,
+            duplicate: true,
+          };
+        }
+        const priority = priorityFor(input.impact, input.urgency, input.type),
+          now = Date.now();
+        const id = `${input.type}-${Math.floor(10000 + Math.random() * 89999)}`;
+        tx.insert(tickets)
+          .values({
+            id,
+            ownerId: input.ownerId,
+            type: input.type,
+            title: input.title,
+            description: input.description,
+            category: input.category,
+            impact: input.impact,
+            urgency: input.urgency,
+            priority,
+            status: "Aberto",
+            dueAt: dueAt(new Date(now), priority).getTime(),
+            createdAt: now,
+            updatedAt: now,
+            idempotencyKey: input.key,
+          })
+          .run();
+        tx.insert(ticketOperations)
+          .values({
+            key: input.key,
+            ownerId: input.ownerId,
+            ticketId: id,
+            duplicate: false,
+          })
+          .run();
         return {
-          ticket: existing.find((t) => t.id === duplicate)!,
-          duplicate: true,
+          ticket: tx.select().from(tickets).where(eq(tickets.id, id)).get()!,
+          duplicate: false,
         };
-      const priority = priorityFor(input.impact, input.urgency, input.type),
-        now = Date.now();
-      const id = `${input.type}-${Math.floor(10000 + Math.random() * 89999)}`;
-      db.insert(tickets)
-        .values({
-          id,
-          ownerId: input.ownerId,
-          type: input.type,
-          title: input.title,
-          description: input.description,
-          category: input.category,
-          impact: input.impact,
-          urgency: input.urgency,
-          priority,
-          status: "Aberto",
-          dueAt: dueAt(new Date(now), priority).getTime(),
-          createdAt: now,
-          updatedAt: now,
-          idempotencyKey: input.key,
-        })
-        .run();
-      return {
-        ticket: db.select().from(tickets).where(eq(tickets.id, id)).get()!,
-        duplicate: false,
-      };
-    });
+      }),
+    );
   },
   update: (ownerId: string, id: string, note: string) =>
     legacy(() => {

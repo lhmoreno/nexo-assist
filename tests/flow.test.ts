@@ -47,6 +47,9 @@ describe("fluxos seguros", () => {
     });
     const again = await handleChat(user, { action: "confirm" });
     expect(again.tickets.length).toBe(count);
+    expect(
+      again.tickets.find((t) => t.description.includes(id))?.description,
+    ).toContain("Atualização:");
   });
   it("restringe consulta e atualização ao proprietário", async () => {
     const t = (
@@ -64,9 +67,32 @@ describe("fluxos seguros", () => {
     expect(await ticketService.get(other, t.id)).toBeNull();
     await expect(ticketService.update(other, t.id, "nota")).rejects.toThrow();
   });
+  it("atualiza uma duplicata no serviço e não repete a atualização na mesma chave", async () => {
+    const title = "VPN falha no notebook " + randomUUID();
+    const input = {
+      ownerId: user,
+      type: "INC" as const,
+      title,
+      description: title,
+      category: "Rede e VPN",
+      impact: "pessoa" as const,
+      urgency: "normal" as const,
+    };
+    const first = await ticketService.create({ ...input, key: randomUUID() });
+    const key = randomUUID();
+    const second = await ticketService.create({ ...input, key });
+    expect(second.duplicate).toBe(true);
+    expect(second.ticket.id).toBe(first.ticket.id);
+    expect(second.ticket.description).toContain("Atualização:");
+    const retry = await ticketService.create({ ...input, key });
+    expect(retry.ticket.description).toBe(second.ticket.description);
+  });
   it("transfere e pausa o agente", async () => {
     const state = await handleChat(other, { action: "transfer" });
     expect(state.conversation.status).toBe("waiting");
+    expect(
+      state.messages.some((m) => m.body.startsWith("Resumo para o analista:")),
+    ).toBe(true);
     const human = await handleChat(other, { action: "send", text: "ajuda" });
     expect(human.messages.at(-1)?.sender).toBe("employee");
     expect(human.conversation.status).toBe("waiting");

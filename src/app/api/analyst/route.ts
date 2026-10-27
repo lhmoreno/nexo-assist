@@ -5,6 +5,7 @@ import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { conversations, messages, tickets, users } from "@/lib/schema";
 import { addMessage } from "@/lib/conversation";
+import { touchAnalyst } from "@/lib/metrics";
 const action = z.object({
   conversationId: z.string(),
   action: z.enum(["assume", "reply", "return", "close"]),
@@ -12,7 +13,8 @@ const action = z.object({
 });
 export async function GET(req: Request) {
   try {
-    await requireUser("analyst");
+    const analyst = await requireUser("analyst");
+    touchAnalyst(analyst.id);
     const id = new URL(req.url).searchParams.get("id");
     const list = db
       .select()

@@ -3,7 +3,13 @@ import { randomUUID } from "node:crypto";
 import { db } from "./db";
 import { conversations, messages, tickets } from "./schema";
 import { decide, searchKnowledge } from "./agent";
-import { isOverdue, priorityFor, type Impact, type Urgency } from "./rules";
+import {
+  duplicateOf,
+  isOverdue,
+  priorityFor,
+  type Impact,
+  type Urgency,
+} from "./rules";
 import { ticketService } from "./tickets";
 type Draft = {
   action: "create" | "update" | "reopen";
@@ -75,6 +81,25 @@ function saveDraft(id: string, draft: Draft | null) {
     .run();
 }
 function transfer(id: string, reason: string) {
+  const context = db
+    .select()
+    .from(messages)
+    .where(eq(messages.conversationId, id))
+    .orderBy(desc(messages.createdAt))
+    .all()
+    .filter(
+      (m) =>
+        m.sender === "employee" &&
+        !/^(Confirmar|Cancelar|Selecionar\s|Falar com analista$)/i.test(m.body),
+    )
+    .slice(0, 3)
+    .reverse()
+    .map((m) => m.body.slice(0, 240));
+  addMessage(
+    id,
+    "system",
+    `Resumo para o analista: ${reason}. ${context.length ? context.join(" | ") : "Histórico da conversa disponível acima."}`,
+  );
   db.update(conversations)
     .set({ status: "waiting", draft: null, updatedAt: Date.now() })
     .where(eq(conversations.id, id))
@@ -182,7 +207,7 @@ export async function handleChat(
           key: c.id + ":" + c.draft,
         });
         body = result.duplicate
-          ? `Encontrei o chamado ${result.ticket.id} para o mesmo problema; não criei outro.`
+          ? `Atualizei o chamado existente ${result.ticket.id}; não criei outro.`
           : `Chamado ${result.ticket.id} criado com prioridade ${result.ticket.priority}.`;
         if (!result.duplicate && result.ticket.priority === "Crítica") {
           await ticketService.transfer(userId, result.ticket.id);
@@ -370,23 +395,33 @@ export async function handleChat(
         rules.push("Dados obrigatórios");
       } else {
         const priority = priorityFor(impact, urgency, type);
-        draft = {
-          action: "create",
-          type,
-          title: d.title || text.slice(0, 80),
-          description: d.description,
-          category,
-          impact,
-          urgency,
-        };
+        const similar = duplicateOf(
+          `${d.title || text} ${d.description}`,
+          owned,
+        );
+        draft = similar
+          ? { action: "update", ticketId: similar, description: d.description }
+          : {
+              action: "create",
+              type,
+              title: d.title || text.slice(0, 80),
+              description: d.description,
+              category,
+              impact,
+              urgency,
+            };
         saveDraft(c.id, draft);
-        body =
-          "Preparei um rascunho com a prioridade e o prazo calculados. Confira os dados antes de criar o chamado.";
+        body = similar
+          ? `Encontrei o chamado aberto ${similar} para o mesmo problema. Preparei uma atualização; confira e confirme antes de alterar.`
+          : "Preparei um rascunho com a prioridade e o prazo calculados. Confira os dados antes de criar o chamado.";
         rules.push(
           "Confirmação obrigatória",
           "Prioridade calculada no backend",
+          ...(similar
+            ? ["Chamado semelhante: atualizar em vez de duplicar"]
+            : []),
         );
-        if (priority === "Crítica") {
+        if (!similar && priority === "Crítica") {
           body += " Após a confirmação, um analista será acionado.";
         }
       }
