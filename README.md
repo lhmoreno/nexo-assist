@@ -20,13 +20,15 @@ Capturas reais do servidor em desenvolvimento, correspondentes aos cinco estados
 
 | Tela                             | Captura                                                          |
 | -------------------------------- | ---------------------------------------------------------------- |
-| Identificação                    | [login](docs/screenshots/login.webp)                             |
+| Identificação                    | [login atualizado](docs/screenshots/login.png)                   |
 | Chat · novo chamado              | [rascunho e confirmação](docs/screenshots/chat-funcionario.webp) |
 | Chat · consulta e transferência  | [seleção de chamados](docs/screenshots/chat-consulta.webp)       |
 | Atendente · conversas            | [fila e chamados](docs/screenshots/console-analista.webp)        |
 | Atendente · atendimento assumido | [resposta humana](docs/screenshots/atendimento-assumido.webp)    |
 
 A interface segue as dimensões, paleta, fontes, marca, composição e componentes inspecionados no arquivo Pen. O texto e os dados exibidos vêm do seed e dos fluxos reais, por isso podem diferir dos exemplos estáticos do protótipo. O painel de decisões e o aviso de modo demo acrescentam informações exigidas pelo desafio.
+
+Na identificação, os ícones de e-mail e senha, a visualização da senha, o link de ajuda, a opção de manter a sessão e o rodapé de privacidade têm ações reais. Os três indicadores seguem os rótulos do Pen, mas mostram dados locais em vez dos números ilustrativos: tempo médio entre a primeira mensagem e a primeira resposta em conversas que não são apenas exemplos do seed; porcentagem de conversas encerradas sem analista, quando há amostra; e analistas com atividade nos últimos 60 segundos. `—` significa que ainda não há amostra. O link de privacidade explica o tratamento dos dados nesta demonstração.
 
 | Papel       | E-mail                  | Senha                    |
 | ----------- | ----------------------- | ------------------------ |
@@ -49,7 +51,7 @@ src/lib/db.ts            SQLite + Drizzle ORM
 scripts/seed.ts          Usuários, chamados e 8 artigos
 ```
 
-O agente Mastra recebe o histórico recente persistido, inclusive de sessões anteriores, e pode usar ferramentas tipadas para consultar chamados do usuário autenticado e buscar artigos. Sua saída Zod descreve intenção, tipo, categoria, impacto, urgência e confiança. O backend recalcula prioridade e prazo e só executa alterações após confirmação por botão. Consultas e operações de chamado validam o proprietário no serviço, mesmo quando o modelo sugere um ID. O rascunho fica persistido no SQLite. Uma trava atômica impede confirmações concorrentes; criação usa chave de idempotência e detecção de duplicidade. Erros do serviço mantêm o rascunho para nova tentativa.
+O agente Mastra recebe o histórico recente persistido, inclusive de sessões anteriores, e pode usar ferramentas tipadas para consultar chamados do usuário autenticado e buscar artigos. Sua saída Zod descreve intenção, tipo, categoria, impacto, urgência e confiança. O backend recalcula prioridade e prazo e só executa alterações após confirmação por botão. Consultas e operações de chamado validam o proprietário no serviço, mesmo quando o modelo sugere um ID. O rascunho fica persistido no SQLite. Uma trava atômica impede confirmações concorrentes; criação usa chave de idempotência e detecção de duplicidade. Se há um chamado aberto semelhante, o rascunho propõe uma atualização confirmada. Erros do serviço mantêm o rascunho para nova tentativa.
 
 Cada resposta do agente grava um registro de decisão em `messages.trace`: intenção, classificação, confiança, ferramentas, resultados, regras, justificativa objetiva, duração e erros. O painel acima da resposta mostra esse registro. Ele não contém pensamentos internos do modelo. A confiança é uma estimativa do modelo, não uma probabilidade calibrada; valores baixos encaminham ao analista.
 
