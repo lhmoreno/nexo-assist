@@ -1,7 +1,8 @@
 import { beforeAll, afterAll, describe, it, expect } from "vitest";
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
-process.env.DATABASE_URL = "./data/test-nexo.sqlite";
+const testDb = `./data/test-nexo-${randomUUID()}.sqlite`;
+process.env.DATABASE_URL = testDb;
 process.env.DEMO_MODE = "true";
 let db: typeof import("../src/lib/db").db;
 let schema: typeof import("../src/lib/schema");
@@ -24,7 +25,7 @@ beforeAll(async () => {
 afterAll(() => {
   for (const ext of ["", "-wal", "-shm"])
     try {
-      fs.unlinkSync("./data/test-nexo.sqlite" + ext);
+      fs.unlinkSync(testDb + ext);
     } catch {}
 });
 describe("fluxos seguros", () => {

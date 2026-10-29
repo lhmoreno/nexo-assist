@@ -86,7 +86,7 @@ O padrão é `openai/gpt-4.1-mini`, configurável por `MASTRA_MODEL`. Foi escolh
 
 A autenticação é intencionalmente demonstrativa: usuários seed e qualquer senha não vazia. Em produção, seria substituída por SSO corporativo, com auditoria e limites de taxa. O SQLite simplifica a execução local e não foi projetado para múltiplas instâncias. As respostas aparecem após a decisão completa do modelo, sem streaming de tokens; a atualização entre funcionário e analista usa polling de 4 segundos. A busca da base de conhecimento usa palavras-chave, sem embeddings. A detecção de duplicidade é lexical. Uma próxima versão incluiria avaliação com conversas reais anonimizadas, calibração da confiança, busca semântica e métricas de SLA.
 
-Sem `OPENAI_API_KEY`, o fluxo real do LLM não pode ser exercitado. O modo de demonstração é limitado e identificado na interface. O projeto não inclui deploy nem repositório remoto.
+Sem `OPENAI_API_KEY`, o fluxo real do LLM não pode ser exercitado. O modo de demonstração é limitado e identificado na interface. O projeto não inclui deploy.
 
 ## Referências
 
