@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireUser } from "@/lib/auth";
+import { noStore, requireUser } from "@/lib/auth";
 import { conversationState, handleChat } from "@/lib/conversation";
 const body = z.object({
   action: z.enum(["send", "confirm", "cancel", "select", "transfer", "new"]),
@@ -10,14 +10,18 @@ const body = z.object({
 export async function GET() {
   try {
     const u = await requireUser("employee");
-    return NextResponse.json({
-      ...conversationState(u.id),
-      demo: process.env.DEMO_MODE === "true",
-    });
+    return NextResponse.json(
+      {
+        ...conversationState(u.id),
+        viewer: u.id,
+        demo: process.env.DEMO_MODE === "true",
+      },
+      noStore,
+    );
   } catch {
     return NextResponse.json(
       { error: "Acesso não autorizado." },
-      { status: 401 },
+      { status: 401, ...noStore },
     );
   }
 }
@@ -25,7 +29,10 @@ export async function POST(req: Request) {
   try {
     const u = await requireUser("employee");
     const input = body.parse(await req.json());
-    return NextResponse.json(await handleChat(u.id, input));
+    return NextResponse.json(
+      { ...(await handleChat(u.id, input)), viewer: u.id },
+      noStore,
+    );
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Erro no chat." },

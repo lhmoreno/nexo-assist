@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { and, desc, eq } from "drizzle-orm";
-import { requireUser } from "@/lib/auth";
+import { noStore, requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { conversations, messages, tickets, users } from "@/lib/schema";
 import { addMessage } from "@/lib/conversation";
@@ -34,29 +34,37 @@ export async function GET(req: Request) {
             .orderBy(desc(messages.createdAt))
             .get()?.body || "Conversa iniciada",
       }));
-    if (!id) return NextResponse.json({ conversations: list });
+    if (!id)
+      return NextResponse.json(
+        { conversations: list, viewer: analyst.id },
+        noStore,
+      );
     const c = list.find((x) => x.id === id);
     if (!c)
       return NextResponse.json({ error: "Não encontrado." }, { status: 404 });
-    return NextResponse.json({
-      conversations: list,
-      conversation: c,
-      messages: db
-        .select()
-        .from(messages)
-        .where(eq(messages.conversationId, id))
-        .orderBy(messages.createdAt)
-        .all(),
-      tickets: db
-        .select()
-        .from(tickets)
-        .where(eq(tickets.ownerId, c.userId))
-        .all(),
-    });
+    return NextResponse.json(
+      {
+        viewer: analyst.id,
+        conversations: list,
+        conversation: c,
+        messages: db
+          .select()
+          .from(messages)
+          .where(eq(messages.conversationId, id))
+          .orderBy(messages.createdAt)
+          .all(),
+        tickets: db
+          .select()
+          .from(tickets)
+          .where(eq(tickets.ownerId, c.userId))
+          .all(),
+      },
+      noStore,
+    );
   } catch {
     return NextResponse.json(
       { error: "Acesso não autorizado." },
-      { status: 401 },
+      { status: 401, ...noStore },
     );
   }
 }

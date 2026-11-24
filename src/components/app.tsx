@@ -55,6 +55,8 @@ type ChatState = {
   messages: Msg[];
   tickets: TicketData[];
   demo?: boolean;
+  /** Usuário que o servidor identificou para esta resposta. */
+  viewer?: string;
 };
 async function api<T>(url: string, method = "GET", body?: object): Promise<T> {
   const r = await fetch(url, {
@@ -63,7 +65,10 @@ async function api<T>(url: string, method = "GET", body?: object): Promise<T> {
     body: body ? JSON.stringify(body) : undefined,
   });
   const j = await r.json();
-  if (!r.ok) throw new Error(j.error || "Falha na requisição.");
+  if (!r.ok)
+    throw Object.assign(new Error(j.error || "Falha na requisição."), {
+      status: r.status,
+    });
   return j;
 }
 function NexoMark({
@@ -888,7 +893,15 @@ function Profile({ user }: { user: User }) {
     </div>
   );
 }
-function Employee({ user, onLogout }: { user: User; onLogout: () => void }) {
+function Employee({
+  user,
+  onLogout,
+  onSessionLost,
+}: {
+  user: User;
+  onLogout: () => void;
+  onSessionLost: () => void;
+}) {
   const [state, setState] = useState<ChatState | null>(null),
     [text, setText] = useState(""),
     [busy, setBusy] = useState(false),
@@ -898,11 +911,14 @@ function Employee({ user, onLogout }: { user: User; onLogout: () => void }) {
     inputRef = useRef<HTMLInputElement>(null);
   const load = useCallback(async () => {
     try {
-      setState(await api<ChatState>("/api/chat"));
+      const next = await api<ChatState>("/api/chat");
+      if (next.viewer !== user.id) return onSessionLost();
+      setState(next);
     } catch (e) {
+      if ((e as { status?: number }).status === 401) return onSessionLost();
       setError((e as Error).message);
     }
-  }, []);
+  }, [user.id, onSessionLost]);
   useEffect(() => {
     const start = setTimeout(load, 0),
       i = setInterval(load, 4000);
@@ -928,9 +944,11 @@ function Employee({ user, onLogout }: { user: User; onLogout: () => void }) {
         text: quick || text,
         ticketId,
       });
+      if (next.viewer !== user.id) return onSessionLost();
       setState(next);
       if (action === "send") setText("");
     } catch (e) {
+      if ((e as { status?: number }).status === 401) return onSessionLost();
       setError((e as Error).message);
     } finally {
       setBusy(false);
@@ -1156,7 +1174,15 @@ function Employee({ user, onLogout }: { user: User; onLogout: () => void }) {
     </Shell>
   );
 }
-function Analyst({ user, onLogout }: { user: User; onLogout: () => void }) {
+function Analyst({
+  user,
+  onLogout,
+  onSessionLost,
+}: {
+  user: User;
+  onLogout: () => void;
+  onSessionLost: () => void;
+}) {
   const [list, setList] = useState<
       (Conversation & { employee: string; preview?: string })[]
     >([]),
@@ -1172,6 +1198,7 @@ function Analyst({ user, onLogout }: { user: User; onLogout: () => void }) {
   const load = useCallback(async () => {
     try {
       const v = await api<{
+        viewer: string;
         conversations: (Conversation & {
           employee: string;
           preview?: string;
@@ -1180,12 +1207,14 @@ function Analyst({ user, onLogout }: { user: User; onLogout: () => void }) {
         messages: Msg[];
         tickets: TicketData[];
       }>(`/api/analyst${id ? "?id=" + id : ""}`);
+      if (v.viewer !== user.id) return onSessionLost();
       setList(v.conversations);
       if (id) setDetail(v as typeof detail);
     } catch (e) {
+      if ((e as { status?: number }).status === 401) return onSessionLost();
       setError((e as Error).message);
     }
-  }, [id]);
+  }, [id, user.id, onSessionLost]);
   useEffect(() => {
     const start = setTimeout(load, 0),
       i = setInterval(load, 4000);
@@ -1203,6 +1232,7 @@ function Analyst({ user, onLogout }: { user: User; onLogout: () => void }) {
       setText("");
       await load();
     } catch (e) {
+      if ((e as { status?: number }).status === 401) return onSessionLost();
       setError((e as Error).message);
     } finally {
       setBusy(false);
@@ -1556,9 +1586,30 @@ export default function App() {
       .finally(() => setLoading(false));
   }, []);
   async function logout() {
-    await api("/api/auth", "DELETE");
-    setUser(null);
+    try {
+      await api("/api/auth", "DELETE");
+    } finally {
+      setUser(null);
+    }
   }
+  // O cookie é compartilhado entre abas: reconfere quem está logado de fato.
+  const syncSession = useCallback(async () => {
+    try {
+      setUser((await api<{ user: User | null }>("/api/auth")).user);
+    } catch {
+      setUser(null);
+    }
+  }, []);
+  useEffect(() => {
+    const onVisible = () =>
+      document.visibilityState === "visible" && syncSession();
+    window.addEventListener("focus", onVisible);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.removeEventListener("focus", onVisible);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [syncSession]);
   if (loading)
     return (
       <div className="flex min-h-screen items-center justify-center text-slate-500">
@@ -1567,8 +1618,18 @@ export default function App() {
     );
   if (!user) return <Login onLogin={setUser} />;
   return user.role === "analyst" ? (
-    <Analyst user={user} onLogout={logout} />
+    <Analyst
+      key={user.id}
+      user={user}
+      onLogout={logout}
+      onSessionLost={syncSession}
+    />
   ) : (
-    <Employee user={user} onLogout={logout} />
+    <Employee
+      key={user.id}
+      user={user}
+      onLogout={logout}
+      onSessionLost={syncSession}
+    />
   );
 }

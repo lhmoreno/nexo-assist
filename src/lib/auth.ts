@@ -2,6 +2,8 @@ import { cookies } from "next/headers";
 import { eq } from "drizzle-orm";
 import { db } from "./db";
 import { sessions, users } from "./schema";
+/** Respostas de sessão e dados privados nunca devem ficar em cache. */
+export const noStore = { headers: { "Cache-Control": "no-store" } };
 export async function currentUser() {
   const token = (await cookies()).get("nexo_session")?.value;
   if (!token) return null;

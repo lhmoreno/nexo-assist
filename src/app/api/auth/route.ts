@@ -4,7 +4,7 @@ import { randomBytes } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { sessions, users } from "@/lib/schema";
-import { currentUser } from "@/lib/auth";
+import { currentUser, noStore } from "@/lib/auth";
 import { cookies } from "next/headers";
 import { clearAnalystPresence, touchAnalyst } from "@/lib/metrics";
 const login = z.object({
@@ -35,13 +35,24 @@ export async function POST(req: Request) {
       { error: "Usuário de demonstração não encontrado." },
       { status: 401 },
     );
+  // Um novo login encerra a sessão anterior deste navegador, se houver.
+  const previous = (await cookies()).get("nexo_session")?.value;
+  if (previous) {
+    const old = db
+      .select()
+      .from(sessions)
+      .where(eq(sessions.token, previous))
+      .get();
+    if (old) clearAnalystPresence(old.userId);
+    db.delete(sessions).where(eq(sessions.token, previous)).run();
+  }
   const token = randomBytes(32).toString("hex");
   const maxAge = parsed.data.remember ? 7 * 86400 : 8 * 3600;
   db.insert(sessions)
     .values({ token, userId: user.id, expiresAt: Date.now() + maxAge * 1000 })
     .run();
   if (user.role === "analyst") touchAnalyst(user.id);
-  const res = NextResponse.json({ user });
+  const res = NextResponse.json({ user }, noStore);
   res.cookies.set("nexo_session", token, {
     httpOnly: true,
     sameSite: "lax",
@@ -52,7 +63,7 @@ export async function POST(req: Request) {
   return res;
 }
 export async function GET() {
-  return NextResponse.json({ user: await currentUser() });
+  return NextResponse.json({ user: await currentUser() }, noStore);
 }
 export async function DELETE() {
   const token = (await cookies()).get("nexo_session")?.value;
@@ -65,7 +76,7 @@ export async function DELETE() {
     if (session) clearAnalystPresence(session.userId);
     db.delete(sessions).where(eq(sessions.token, token)).run();
   }
-  const res = NextResponse.json({ ok: true });
+  const res = NextResponse.json({ ok: true }, noStore);
   res.cookies.delete("nexo_session");
   return res;
 }
