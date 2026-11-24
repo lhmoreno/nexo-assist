@@ -2,7 +2,9 @@
 
 Agente de service desk de TI da Nexo. O funcionário descreve o problema no chat com as próprias palavras; o agente consulta os chamados dele, busca na central de ajuda, abre ou atualiza chamados (sempre com confirmação) e chama um analista quando precisa. Um console separado permite ao analista assumir, devolver e encerrar conversas.
 
-Stack: Next.js 16 (App Router), TypeScript estrito, Mastra, SQLite + Drizzle, Vitest.
+**Demo publicada:** <https://nexo-assist-theta.vercel.app> (logins abaixo, qualquer senha). Código: <https://github.com/lhmoreno/nexo-assist>.
+
+Stack: Next.js 16 (App Router), TypeScript estrito, Mastra, libSQL/SQLite + Drizzle (arquivo local ou Turso), Vitest.
 
 ## Como rodar
 
@@ -15,13 +17,14 @@ pnpm setup                   # cria data/nexo.sqlite com os dados de exemplo
 pnpm dev                     # http://localhost:3000
 ```
 
-| Variável                                 | Para que serve                                                                                                                                                                       |
-| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `OPENAI_API_KEY`                         | Chave do provedor. Fica só no servidor; nunca vai ao navegador nem ao Git.                                                                                                           |
-| `MASTRA_MODEL`                           | Modelo do agente. Padrão `openai/gpt-6-luna`.                                                                                                                                        |
-| `DEMO_MODE`                              | `true` usa uma classificação determinística, sem LLM, e a interface avisa. Serve para percorrer os fluxos sem chave; **a avaliação do agente deve ser feita com `DEMO_MODE=false`.** |
-| `DATABASE_URL`                           | Arquivo SQLite. Padrão `./data/nexo.sqlite`.                                                                                                                                         |
-| `LEGACY_FAILURE_RATE`, `LEGACY_DELAY_MS` | Simulam indisponibilidade e lentidão do sistema de chamados legado.                                                                                                                  |
+| Variável                                            | Para que serve                                                                                                                                                                                          |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `OPENAI_API_KEY`                                    | Chave do provedor. Fica só no servidor; nunca vai ao navegador nem ao Git.                                                                                                                              |
+| `MASTRA_MODEL`                                      | Modelo do agente. Padrão `openai/gpt-6-luna`.                                                                                                                                                           |
+| `DEMO_MODE`                                         | `true` usa uma classificação determinística, sem LLM, e a interface avisa. Serve para percorrer os fluxos sem chave; **a avaliação do agente deve ser feita com `DEMO_MODE=false`.**                    |
+| `DATABASE_URL`, `DATABASE_AUTH_TOKEN`               | Arquivo SQLite local (padrão `./data/nexo.sqlite`) ou URL libSQL do Turso (`libsql://...`, com o token). A integração Turso da Vercel injeta `TURSO_DATABASE_URL` e `TURSO_AUTH_TOKEN`, também aceitos. |
+| `DAILY_MESSAGE_LIMIT`, `GLOBAL_DAILY_MESSAGE_LIMIT` | Tetos de mensagens por 24 h, por usuário (100) e total (1000), para proteger a chave do modelo.                                                                                                         |     |
+| `LEGACY_FAILURE_RATE`, `LEGACY_DELAY_MS`            | Simulam indisponibilidade e lentidão do sistema de chamados legado.                                                                                                                                     |
 
 Logins de exemplo (qualquer senha não vazia):
 
@@ -31,7 +34,7 @@ Logins de exemplo (qualquer senha não vazia):
 | Funcionário | `bruno.lima@nexo.com`   |
 | Analista    | `joao.martins@nexo.com` |
 
-Há outros funcionários no seed (Carla, Diego, Elisa, Fábio, Gabriela). Para reiniciar os dados, pare o app, apague `data/nexo.sqlite` e rode `pnpm setup`. Conversas, chamados e o estado de cada conversa ficam no SQLite e sobrevivem a reinícios.
+Há outros funcionários no seed (Carla, Diego, Elisa, Fábio, Gabriela). Para reiniciar os dados, pare o app, apague `data/nexo.sqlite` e rode `pnpm setup`. Conversas, chamados e o estado de cada conversa ficam no SQLite e sobrevivem a reinícios (no banco local ou no Turso).
 
 Roteiro rápido para avaliar (como Ana): "Minha VPN não conecta" → artigo da central de ajuda; "é Windows 11 e tenho entrega hoje" → o agente oferece abrir chamado e pergunta o que já foi tentado; responda pelos botões, confira o rascunho (tipo, prioridade, prazo) e confirme. Depois pergunte "Qual o status do chamado do Bruno Lima?" (recusa) e peça um analista; entre como João para ver o resumo e assumir.
 
@@ -58,7 +61,7 @@ src/lib/conversation.ts  Orquestração: estados da conversa, rascunho, confirma
 src/lib/intake.ts        Título, descrição estruturada e formatação de prazo do chamado
 src/lib/rules.ts         Prioridade, SLA, duplicidade, reabertura (funções puras)
 src/lib/tickets.ts       Serviço de chamados simulado (o "legado"), independente do agente
-src/lib/db.ts, schema.ts SQLite + Drizzle ORM
+src/lib/db.ts, schema.ts libSQL (arquivo ou Turso) + Drizzle ORM
 scripts/seed.ts          Funcionários, chamados em vários estados e 8 artigos
 ```
 
@@ -66,7 +69,7 @@ Decisões:
 
 - **O modelo classifica; o backend decide e executa.** O LLM só devolve fatos tipados (intenção, tipo, categoria, impacto, urgência, confiança, campos do chamado). Prioridade, prazo, duplicidade, privacidade e confirmação são calculados em código determinístico e testável. O modelo nunca cria nem altera chamado.
 - **Serviço de chamados separado do agente.** `tickets.ts` simula o sistema legado (falhas e atraso configuráveis, timeout de 3 s) e aplica o proprietário em toda operação, então mesmo um ID sugerido pelo modelo não alcança chamado de outra pessoa.
-- **Conversa como máquina de estados** (`agent`, `waiting`, `analyst`, `closed`) persistida no SQLite. O rascunho pendente também é persistido, com trava atômica contra confirmações concorrentes e chave de idempotência na criação.
+- **Conversa como máquina de estados** (`agent`, `waiting`, `analyst`, `closed`) persistida no banco. O rascunho pendente também é persistido, com trava atômica contra confirmações concorrentes e chave de idempotência na criação.
 - **Interface sem estado de negócio.** O navegador consulta o servidor a cada 4 s (sem WebSocket) e confere a cada resposta qual usuário a sessão representa; se a sessão mudou em outra aba, a tela se reinicia para o usuário atual.
 
 ## Como o agente decide o que fazer
@@ -117,11 +120,11 @@ Uso consciente: no máximo **uma chamada ao modelo por mensagem de texto**, cont
 ## Principais trade-offs
 
 - **Sem streaming de tokens.** A resposta aparece quando a decisão completa chega; em troca, a saída estruturada é validada antes de qualquer efeito. A atualização entre funcionário e analista é por polling de 4 s.
-- **SQLite local.** Simples e persistente para rodar com poucos comandos, mas não serve para várias instâncias nem para o disco efêmero de plataformas serverless.
+- **SQLite/libSQL.** Local, o arquivo SQLite roda com poucos comandos; em produção, o mesmo código usa Turso. O driver libSQL é assíncrono, o que custou reescrever o acesso a dados, mas elimina a diferença entre ambientes. O esquema é criado em tempo de execução (`CREATE TABLE IF NOT EXISTS`), sem sistema de migrações.
 - **Busca da central de ajuda por palavras-chave**, sem embeddings. Suficiente para 8 artigos; limitada para sinônimos.
 - **Duplicidade lexical** (radicais e sinônimos comuns), não semântica.
 - **Perguntas dependem do modelo**: o backend limita a duas por relato e nunca bloqueia o rascunho por falta de detalhe técnico, para não frustrar o funcionário.
-- **Sem limite de taxa nem auditoria** além do trace por mensagem.
+- **Limites de uso simples**: tetos diários por usuário e globais, contados no banco, e sem limite de taxa por IP nem auditoria além do trace por mensagem.
 
 ## O que faria com mais tempo
 
@@ -133,7 +136,16 @@ Uso consciente: no máximo **uma chamada ao modelo por mensagem de texto**, cont
 
 ## Deploy
 
-Não publiquei o projeto. Para publicar em uma plataforma serverless seria preciso trocar o SQLite por um banco gerenciado, definir `OPENAI_API_KEY` e `MASTRA_MODEL` como variáveis de ambiente do provedor (não no repositório), e limitar o uso (limite de taxa por IP/usuário e teto de gasto no provedor do modelo) para evitar custo inesperado.
+Publicado na Vercel: <https://nexo-assist-theta.vercel.app>, com banco Turso (libSQL) provisionado pela integração da Vercel.
+
+Como foi feito:
+
+1. `vercel link` e `vercel integration add tursocloud/database`, que cria o banco e injeta `TURSO_DATABASE_URL` e `TURSO_AUTH_TOKEN` no projeto.
+2. Seed do banco remoto: `DATABASE_URL=<url> DATABASE_AUTH_TOKEN=<token> pnpm seed` (idempotente).
+3. Variáveis de produção `OPENAI_API_KEY` (sensível, nunca no repositório), `MASTRA_MODEL=openai/gpt-6-luna` e `DEMO_MODE=false`.
+4. `vercel deploy --prod`.
+
+Proteção contra abuso e custo: a chave fica só no servidor; cada funcionário tem teto de 100 mensagens por 24 h e o serviço tem teto global de 1000 (`DAILY_MESSAGE_LIMIT`, `GLOBAL_DAILY_MESSAGE_LIMIT`), além do limite de 30 por sessão; o modelo é pequeno (uma chamada por mensagem). Como o login é demonstrativo, qualquer pessoa pode entrar com os usuários de exemplo, então o teto global é o que limita o gasto. Recomendo também um limite de gasto mensal no painel do provedor do modelo.
 
 ## Referências
 
