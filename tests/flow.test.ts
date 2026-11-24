@@ -35,7 +35,14 @@ describe("fluxos seguros", () => {
       action: "send",
       text: "Abrir chamado: meu notebook está lento após atualização " + id,
     });
-    expect(first.conversation.draft).toBeTruthy();
+    expect(first.conversation.draft).toBeNull();
+    expect(first.messages.at(-1)?.trace).toContain('"clarify"');
+    await handleChat(user, { action: "send", text: "Sim, já reiniciei" });
+    const second = await handleChat(user, {
+      action: "send",
+      text: "Windows 11",
+    });
+    expect(second.conversation.draft).toBeTruthy();
     expect(first.tickets.some((t) => t.description.includes(id))).toBe(false);
     const confirmed = await handleChat(user, { action: "confirm" });
     expect(confirmed.tickets.some((t) => t.description.includes(id))).toBe(
@@ -46,6 +53,8 @@ describe("fluxos seguros", () => {
       action: "send",
       text: "Abrir chamado: meu notebook está lento após atualização " + id,
     });
+    await handleChat(user, { action: "send", text: "Sim, já reiniciei" });
+    await handleChat(user, { action: "send", text: "Windows 11" });
     const again = await handleChat(user, { action: "confirm" });
     expect(again.tickets.length).toBe(count);
     expect(
@@ -91,8 +100,15 @@ describe("fluxos seguros", () => {
   it("transfere e pausa o agente", async () => {
     const state = await handleChat(other, { action: "transfer" });
     expect(state.conversation.status).toBe("waiting");
+    // O resumo existe para o analista, mas não aparece para o funcionário.
+    expect(state.messages.some((m) => m.body.startsWith("Resumo"))).toBe(false);
+    const conv = state.conversation.id;
     expect(
-      state.messages.some((m) => m.body.startsWith("Resumo para o analista:")),
+      db
+        .select()
+        .from(schema.messages)
+        .all()
+        .some((m) => m.conversationId === conv && m.body.startsWith("Resumo")),
     ).toBe(true);
     const human = await handleChat(other, { action: "send", text: "ajuda" });
     expect(human.messages.at(-1)?.sender).toBe("employee");
@@ -226,5 +242,102 @@ describe("consulta de chamado vencido", () => {
     });
     expect(selected.conversation.status).toBe("waiting");
     expect(selected.messages.at(-1)?.body).toContain("analista");
+  });
+});
+
+describe("jornada de abertura (Anexo B)", () => {
+  const who = "test-journey";
+  beforeAll(() => {
+    db.insert(schema.users)
+      .values({
+        id: who,
+        name: "Jo Jornada",
+        email: who + "@nexo.com",
+        role: "employee",
+      })
+      .onConflictDoNothing()
+      .run();
+    db.insert(schema.users)
+      .values({
+        id: "test-bruno",
+        name: "Bruno Teste",
+        email: "tb@nexo.com",
+        role: "employee",
+      })
+      .onConflictDoNothing()
+      .run();
+    db.insert(schema.articles)
+      .values({
+        id: "test-vpn2",
+        title: "VPN não conecta",
+        body: "Reinstale o cliente VPN.",
+        keywords: "vpn conecta",
+      })
+      .onConflictDoNothing()
+      .run();
+  });
+  it("oferece chamado após o artigo, pergunta o que já tentou e mostra tipo e prazo", async () => {
+    const art = await handleChat(who, {
+      action: "send",
+      text: "Minha VPN não conecta",
+    });
+    expect(art.messages.at(-1)?.trace).toContain('"knowledge"');
+    expect(art.messages.at(-1)?.trace).not.toContain('"priority":"Média"');
+    const q = await handleChat(who, {
+      action: "send",
+      text: "é Windows 11 e tenho entrega hoje",
+    });
+    const qt = JSON.parse(q.messages.at(-1)!.trace!);
+    expect(qt.intent).toBe("clarify");
+    expect(qt.quick).toContain("Sim, já reinstalei");
+    const d = await handleChat(who, {
+      action: "send",
+      text: "Sim, já reinstalei",
+    });
+    const dt = JSON.parse(d.messages.at(-1)!.trace!);
+    expect(dt.draft.type).toBe("INC");
+    expect(dt.draft.title).toMatch(/^[A-ZÀ-Ú]/);
+    expect(dt.draft.title).not.toMatch(/quero abrir/i);
+    expect(dt.draft.description).toContain("Problema:");
+    expect(dt.draft.description).toContain(
+      "Já tentou: Reinstalou o cliente de VPN",
+    );
+    expect(dt.draft.description).toContain("Sistema operacional: Windows 11");
+    expect(dt.draft.description).toContain("entrega hoje");
+    expect(dt.priority).toBe("Alta");
+    expect(dt.dueAt).toBeGreaterThan(Date.now());
+    const done = await handleChat(who, { action: "confirm" });
+    const last = done.messages.at(-1)!;
+    expect(last.body).toMatch(/Prazo:/);
+    expect(JSON.parse(last.trace!).ticket.id).toMatch(/^INC-/);
+  });
+  it("explica a recusa ao consultar chamado de outra pessoa", async () => {
+    const r = await handleChat(who, {
+      action: "send",
+      text: "Qual o status do chamado do Bruno Teste?",
+    });
+    expect(r.messages.at(-1)?.body).toBe(
+      "Só posso informar chamados abertos por você.",
+    );
+    const t = await handleChat(who, {
+      action: "send",
+      text: "Status do chamado INC-00001",
+    });
+    expect(t.messages.at(-1)?.body).toBe(
+      "Só posso informar chamados abertos por você.",
+    );
+  });
+  it("resumo da transferência traz chamado, problema, prioridade e tentativas", async () => {
+    await handleChat(who, { action: "transfer" });
+    const conv = conversationState(who).conversation.id;
+    const summary = db
+      .select()
+      .from(schema.messages)
+      .all()
+      .find((m) => m.conversationId === conv && m.body.startsWith("Resumo"))!;
+    expect(summary.body).toMatch(/Chamado: INC-/);
+    expect(summary.body).toContain("Prioridade: Alta");
+    expect(summary.body).toContain("Já tentado: Reinstalou");
+    expect(summary.body).not.toContain(" | ");
   });
 });

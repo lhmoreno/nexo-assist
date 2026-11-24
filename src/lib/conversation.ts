@@ -1,9 +1,12 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { db } from "./db";
-import { conversations, messages, tickets } from "./schema";
-import { decide, searchKnowledge } from "./agent";
+import { conversations, messages, tickets, users } from "./schema";
+import { decide, searchKnowledge, type DecideContext } from "./agent";
+import { buildDescription, cleanTitle, formatDue } from "./intake";
+import { normalize } from "./rules";
 import {
+  dueAt,
   duplicateOf,
   isOverdue,
   priorityFor,
@@ -20,7 +23,18 @@ type Draft = {
   impact?: Impact;
   urgency?: Urgency;
   ticketId?: string;
+  problem?: string;
+  tried?: string[];
 };
+const QUICK = /^(Confirmar|Cancelar|Selecionar\s|Falar com analista$)/i;
+const parse = (raw: string | null): Record<string, unknown> => {
+  try {
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+};
+export const isHandoff = (raw: string | null) => parse(raw).kind === "handoff";
 export function addMessage(
   conversationId: string,
   sender: "employee" | "agent" | "analyst" | "system",
@@ -65,12 +79,14 @@ export function conversationState(userId: string) {
   const c = getConversation(userId);
   return {
     conversation: c,
+    // O resumo da transferência é só para o console do analista.
     messages: db
       .select()
       .from(messages)
       .where(eq(messages.conversationId, c.id))
       .orderBy(messages.createdAt)
-      .all(),
+      .all()
+      .filter((m) => !isHandoff(m.trace)),
     tickets: db.select().from(tickets).where(eq(tickets.ownerId, userId)).all(),
   };
 }
@@ -80,26 +96,56 @@ function saveDraft(id: string, draft: Draft | null) {
     .where(eq(conversations.id, id))
     .run();
 }
-function transfer(id: string, reason: string) {
-  const context = db
+type Ticket = typeof tickets.$inferSelect;
+function transfer(id: string, reason: string, ticket?: Ticket) {
+  const rows = db
     .select()
     .from(messages)
     .where(eq(messages.conversationId, id))
     .orderBy(desc(messages.createdAt))
-    .all()
-    .filter(
-      (m) =>
-        m.sender === "employee" &&
-        !/^(Confirmar|Cancelar|Selecionar\s|Falar com analista$)/i.test(m.body),
-    )
-    .slice(0, 3)
-    .reverse()
-    .map((m) => m.body.slice(0, 240));
-  addMessage(
-    id,
-    "system",
-    `Resumo para o analista: ${reason}. ${context.length ? context.join(" | ") : "Histórico da conversa disponível acima."}`,
-  );
+    .all();
+  const last = rows
+    .filter((m) => m.sender === "employee" && !QUICK.test(m.body))
+    .at(0);
+  const fromTrace = rows
+    .filter((m) => m.sender === "agent")
+    .map((m) => parse(m.trace))
+    .find((t) => t.ticket || t.draft);
+  const t = ticket ?? (fromTrace?.ticket as Ticket | undefined);
+  const d = t ? undefined : (fromTrace?.draft as Draft | undefined);
+  const line = (label: string, text?: string | null) =>
+    text ? `${label}: ${text}` : null;
+  const field = (name: string) =>
+    t?.description.match(new RegExp(`^${name}: (.+?)\\.?$`, "m"))?.[1];
+  const problem = t
+    ? field("Problema") || t.title
+    : d?.problem || d?.title || last?.body.slice(0, 200);
+  const tried = t
+    ? field("Já tentou")
+    : d?.tried?.length
+      ? d.tried.join("; ")
+      : undefined;
+  const text = [
+    "Resumo para o analista",
+    line("Motivo da transferência", reason),
+    t
+      ? `Chamado: ${t.id} · ${t.title} (${t.status}, prazo ${formatDue(t.dueAt)})`
+      : d
+        ? "Chamado: ainda não aberto (rascunho aguardando confirmação)"
+        : "Chamado: nenhum associado a esta conversa",
+    line("Problema", problem),
+    line(
+      "Prioridade",
+      t?.priority ?? (fromTrace?.priority as string | undefined),
+    ),
+    line("Já tentado", tried),
+    last && last.body !== problem
+      ? line("Última mensagem do funcionário", `“${last.body.slice(0, 240)}”`)
+      : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
+  addMessage(id, "system", text, { kind: "handoff" });
   db.update(conversations)
     .set({ status: "waiting", draft: null, updatedAt: Date.now() })
     .where(eq(conversations.id, id))
@@ -195,6 +241,7 @@ export async function handleChat(
     }
     try {
       let body = "";
+      let created: Ticket | undefined;
       if (draft.action === "create") {
         const result = await ticketService.create({
           ownerId: userId,
@@ -206,13 +253,14 @@ export async function handleChat(
           urgency: draft.urgency!,
           key: c.id + ":" + c.draft,
         });
+        created = result.ticket;
         body = result.duplicate
-          ? `Atualizei o chamado existente ${result.ticket.id}; não criei outro.`
-          : `Chamado ${result.ticket.id} criado com prioridade ${result.ticket.priority}.`;
+          ? `Atualizei o chamado existente ${result.ticket.id}; não criei outro. Prazo: ${formatDue(result.ticket.dueAt)}.`
+          : `Chamado ${result.ticket.id} criado com prioridade ${result.ticket.priority}. Prazo: ${formatDue(result.ticket.dueAt)}.`;
         if (!result.duplicate && result.ticket.priority === "Crítica") {
           await ticketService.transfer(userId, result.ticket.id);
           body += " Atendimento crítico: um analista foi acionado.";
-          transfer(c.id, "chamado crítico");
+          transfer(c.id, "chamado crítico", result.ticket);
         }
       } else if (draft.action === "update") {
         const t = await ticketService.update(
@@ -220,10 +268,12 @@ export async function handleChat(
           draft.ticketId!,
           draft.description!,
         );
-        body = `Atualizei o chamado ${t.id}.`;
+        created = t;
+        body = `Atualizei o chamado ${t.id}. Prazo: ${formatDue(t.dueAt)}.`;
       } else {
         const t = await ticketService.reopen(userId, draft.ticketId!);
-        body = `Reabri o chamado ${t.id}.`;
+        created = t;
+        body = `Reabri o chamado ${t.id}. Prazo: ${formatDue(t.dueAt)}.`;
       }
       saveDraft(c.id, null);
       return emit(
@@ -232,6 +282,7 @@ export async function handleChat(
         {
           intent: draft.action,
           tools: ["ticketService"],
+          ticket: created,
           rules: [
             "Confirmação explícita",
             "Autorização do proprietário",
@@ -260,7 +311,7 @@ export async function handleChat(
     const t = await ticketService.get(userId, input.ticketId || "");
     if (!t) throw new Error("Chamado não encontrado.");
     addMessage(c.id, "employee", `Selecionar ${t.id}`);
-    if (isOverdue(t.dueAt, t.status)) transfer(c.id, "chamado vencido");
+    if (isOverdue(t.dueAt, t.status)) transfer(c.id, "chamado vencido", t);
     return emit(
       c.id,
       isOverdue(t.dueAt, t.status)
@@ -332,13 +383,63 @@ export async function handleChat(
     .limit(8)
     .all()
     .reverse()
+    .filter((m) => !isHandoff(m.trace))
     .map((m) => `${m.sender}: ${m.body}`);
+  // Relato em andamento: mensagens do funcionário desde o último desfecho.
+  const thread: string[] = [];
+  let lastAgent: { intent?: string; body: string } | undefined,
+    rounds = 0;
+  for (const m of db
+    .select()
+    .from(messages)
+    .where(eq(messages.conversationId, c.id))
+    .orderBy(desc(messages.createdAt))
+    .all()) {
+    if (m.sender === "employee") {
+      if (!QUICK.test(m.body)) thread.unshift(m.body);
+    } else if (m.sender === "agent") {
+      const intent = parse(m.trace).intent as string | undefined;
+      lastAgent ??= { intent, body: m.body };
+      if (intent === "clarify") rounds++;
+      if (
+        !["knowledge", "clarify"].includes(intent || "") &&
+        !m.body.startsWith("Para preparar o chamado")
+      )
+        break;
+    }
+    if (thread.length >= 6) break;
+  }
+  const ctx: DecideContext = {
+    continuing:
+      lastAgent?.intent === "clarify" ||
+      !!lastAgent?.body.startsWith("Para preparar o chamado"),
+    knowledgeBefore: lastAgent?.intent === "knowledge",
+    thread,
+    otherNames: db
+      .select()
+      .from(users)
+      .where(eq(users.role, "employee"))
+      .all()
+      .filter((u) => u.id !== userId)
+      .map((u) => u.name.split(" ")[0]),
+  };
   try {
-    const { decision: d, tools, mode } = await decide(userId, text, history);
+    const {
+      decision: d,
+      tools,
+      mode,
+    } = await decide(userId, text, history, ctx);
+    let quick: string[] | undefined;
+    let dueMs: number | undefined;
+    const asksFor = [...text.matchAll(/(?:INC|REQ)-\d+/gi)].map((x) =>
+      x[0].toUpperCase(),
+    );
     let body = "",
       results: string[] = [];
     const rules: string[] = [];
-    let draft: Draft | null = null;
+    let draft: Draft | null = null,
+      denied = false,
+      clarify = false;
     const owned = await ticketService.list(userId);
     tools.push("ticketService.list");
     const selected = d.ticketId ? owned.find((t) => t.id === d.ticketId) : null;
@@ -357,6 +458,14 @@ export async function handleChat(
       body =
         "Posso ajudar com assuntos de TI. Para esse tema, procure a área responsável.";
       rules.push("Escopo restrito a TI");
+    } else if (
+      ["list", "update", "reopen"].includes(d.intent) &&
+      (d.aboutOtherPerson ||
+        asksFor.some((i) => !owned.some((t) => t.id === i)))
+    ) {
+      body = "Só posso informar chamados abertos por você.";
+      rules.push("Consulta restrita ao proprietário");
+      denied = true;
     } else if (d.confidence < 0.55) {
       body = transfer(c.id, "classificação com baixa confiança");
       rules.push("Baixa confiança");
@@ -384,7 +493,6 @@ export async function handleChat(
         urgency = d.urgency,
         category = d.category;
       if (
-        d.missing.length > 0 ||
         !impact ||
         !urgency ||
         !category ||
@@ -394,35 +502,53 @@ export async function handleChat(
         body = `Para preparar o chamado, informe ${d.missing.length ? d.missing.join(", ") : "o que aconteceu, quantas pessoas foram afetadas e se há um compromisso em risco"}.`;
         rules.push("Dados obrigatórios");
       } else {
-        const priority = priorityFor(impact, urgency, type);
-        const similar = duplicateOf(
-          `${d.title || text} ${d.description}`,
-          owned,
-        );
-        draft = similar
-          ? { action: "update", ticketId: similar, description: d.description }
-          : {
-              action: "create",
-              type,
-              title: d.title || text.slice(0, 80),
-              description: d.description,
-              category,
-              impact,
-              urgency,
-            };
-        saveDraft(c.id, draft);
-        body = similar
-          ? `Encontrei o chamado aberto ${similar} para o mesmo problema. Preparei uma atualização; confira e confirme antes de alterar.`
-          : "Preparei um rascunho com a prioridade e o prazo calculados. Confira os dados antes de criar o chamado.";
-        rules.push(
-          "Confirmação obrigatória",
-          "Prioridade calculada no backend",
-          ...(similar
-            ? ["Chamado semelhante: atualizar em vez de duplicar"]
-            : []),
-        );
-        if (!similar && priority === "Crítica") {
-          body += " Após a confirmação, um analista será acionado.";
+        if (d.question && rounds < 2) {
+          body = d.question.text;
+          quick = d.question.options;
+          clarify = true;
+          rules.push("Pergunta de esclarecimento antes do rascunho");
+        } else {
+          const priority = priorityFor(impact, urgency, type);
+          const problem = cleanTitle(d.description || d.title || text, 300);
+          let title = cleanTitle(d.title || problem, 70);
+          if (d.os && !normalize(title).includes(normalize(d.os)))
+            title = cleanTitle(`${title} (${d.os})`, 80);
+          const description = buildDescription({
+            problem,
+            tried: d.tried,
+            os: d.os,
+            deadline: d.deadline,
+            impact,
+          });
+          const similar = duplicateOf(`${title} ${problem}`, owned);
+          draft = similar
+            ? { action: "update", ticketId: similar, description }
+            : {
+                action: "create",
+                type,
+                title,
+                description,
+                category,
+                impact,
+                urgency,
+                problem,
+                tried: d.tried,
+              };
+          saveDraft(c.id, draft);
+          dueMs = dueAt(new Date(), priority).getTime();
+          body = similar
+            ? `Encontrei o chamado aberto ${similar} para o mesmo problema. Preparei uma atualização; confira e confirme antes de alterar.`
+            : `Preparei um rascunho do chamado ${type === "INC" ? "(incidente)" : "(requisição)"} com prioridade ${priority} e prazo até ${formatDue(dueMs)}. Confira os dados antes de criar.`;
+          rules.push(
+            "Confirmação obrigatória",
+            "Prioridade calculada no backend",
+            ...(similar
+              ? ["Chamado semelhante: atualizar em vez de duplicar"]
+              : []),
+          );
+          if (!similar && priority === "Crítica") {
+            body += " Após a confirmação, um analista será acionado.";
+          }
         }
       }
     } else if (d.intent === "update" || d.intent === "reopen") {
@@ -440,31 +566,38 @@ export async function handleChat(
         rules.push("Confirmação obrigatória", "Proprietário validado");
       }
     } else body = "Descreva sua dúvida de TI ou escolha uma opção rápida.";
+    // Classificação só aparece quando faz parte da ação (chamado).
+    const ticketful = ["create", "update", "reopen"].includes(d.intent);
     const priority =
-      d.impact && d.urgency
+      d.intent === "create" && d.impact && d.urgency
         ? priorityFor(d.impact, d.urgency, d.type || "INC")
         : null;
     return emit(
       c.id,
       body,
       {
-        intent: d.intent,
-        type: d.type,
-        category: d.category,
-        impact: d.impact,
-        urgency: d.urgency,
+        intent: denied ? "denied" : clarify ? "clarify" : d.intent,
+        type: ticketful ? d.type : null,
+        category: ticketful ? d.category : null,
+        impact: ticketful ? d.impact : null,
+        urgency: ticketful ? d.urgency : null,
         priority,
+        dueAt: dueMs,
         confidence: d.confidence,
         tools,
         results,
         draft,
+        quick,
         rules,
-        reason:
-          d.intent === "create"
-            ? "Dados classificados; aguardando confirmação."
-            : d.intent === "knowledge"
-              ? "Resposta baseada na central de ajuda."
-              : "Ação escolhida conforme intenção e estado da conversa.",
+        reason: denied
+          ? "Chamados de outras pessoas não são consultados."
+          : clarify
+            ? "Faltam informações úteis ao analista; pergunta feita antes do rascunho."
+            : d.intent === "create"
+              ? "Dados classificados; aguardando confirmação."
+              : d.intent === "knowledge"
+                ? "Resposta baseada na central de ajuda."
+                : "Ação escolhida conforme intenção e estado da conversa.",
         mode,
       },
       started,

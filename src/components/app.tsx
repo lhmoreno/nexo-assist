@@ -393,17 +393,32 @@ function Trace({ raw }: { raw: string | null }) {
   } catch {
     return null;
   }
+  const intents: Record<string, string> = {
+    knowledge: "Dúvida (central de ajuda)",
+    list: "Consulta de chamados",
+    create: "Abertura de chamado",
+    update: "Atualização de chamado",
+    reopen: "Reabertura de chamado",
+    transfer: "Transferência para analista",
+    outside: "Fora do escopo de TI",
+    unclear: "Não entendido",
+    clarify: "Pergunta de esclarecimento",
+    cancel: "Cancelamento",
+    denied: "Consulta negada (outro proprietário)",
+    error: "Erro",
+  };
+  const cond = (label: string, v: string) => (v ? [[label, v]] : []);
   const rows = [
-    ["Intenção", t.intent || "Não informada"],
-    [
+    ["Intenção", intents[String(t.intent)] || t.intent || "Não informada"],
+    ...cond(
       "Tipo e categoria",
-      [t.type, t.category].filter(Boolean).join(" · ") || "Não aplicável",
-    ],
-    [
+      [t.type, t.category].filter(Boolean).join(" · "),
+    ),
+    ...cond(
       "Impacto e urgência",
-      [t.impact, t.urgency].filter(Boolean).join(" · ") || "Não aplicável",
-    ],
-    ["Prioridade", t.priority || "Não aplicável"],
+      [t.impact, t.urgency].filter(Boolean).join(" · "),
+    ),
+    ...cond("Prioridade", String(t.priority || "")),
     [
       "Confiança",
       typeof t.confidence === "number"
@@ -568,7 +583,7 @@ function TicketDetail({
         <h3 className="mt-2 text-[18px] font-semibold leading-6">
           {ticket.title}
         </h3>
-        <p className="mt-1 text-[13.5px] leading-5 text-[#3D4656]">
+        <p className="mt-1 whitespace-pre-line text-[13.5px] leading-5 text-[#3D4656]">
           {ticket.description}
         </p>
       </div>
@@ -620,15 +635,23 @@ type DraftView = {
   urgency?: string;
   ticketId?: string;
 };
+const impactText: Record<string, string> = {
+  empresa: "Toda a empresa",
+  equipe: "Equipe",
+  pessoa: "Só você",
+  baixo: "Sem impacto relevante",
+};
 function DraftCard({
   draft,
   priority,
+  due,
   active,
   onConfirm,
   onCancel,
 }: {
   draft: DraftView;
   priority: unknown;
+  due?: number;
   active: boolean;
   onConfirm: () => void;
   onCancel: () => void;
@@ -650,23 +673,39 @@ function DraftCard({
         <h3 className="mt-2 text-[18px] font-semibold leading-6">
           {draft.title || draft.ticketId}
         </h3>
-        <p className="mt-1 text-[13.5px] leading-5 text-[#3D4656]">
+        <p className="mt-1 whitespace-pre-line text-[13.5px] leading-5 text-[#3D4656]">
           {draft.description}
         </p>
       </div>
       {draft.action === "create" && (
-        <div className="mx-[18px] grid grid-cols-2 gap-3 border-t border-[#E6E8EC] py-3 text-[13px] sm:grid-cols-3">
+        <div className="mx-[18px] grid grid-cols-2 gap-3 border-t border-[#E6E8EC] py-3 text-[13px] sm:grid-cols-5">
+          <div>
+            <span className="block text-[#8E8E8E]">Tipo</span>
+            {draft.type === "REQ" ? "Requisição (REQ)" : "Incidente (INC)"}
+          </div>
           <div>
             <span className="block text-[#8E8E8E]">Categoria</span>
             {draft.category}
           </div>
           <div>
             <span className="block text-[#8E8E8E]">Prioridade</span>
-            {String(priority || "Média")}
+            {String(priority || "—")}
+          </div>
+          <div>
+            <span className="block text-[#8E8E8E]">Prazo</span>
+            {due
+              ? new Date(due).toLocaleString("pt-BR", {
+                  weekday: "short",
+                  day: "2-digit",
+                  month: "2-digit",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })
+              : "—"}
           </div>
           <div>
             <span className="block text-[#8E8E8E]">Afetados</span>
-            {draft.impact}
+            {impactText[draft.impact || ""] || draft.impact}
           </div>
         </div>
       )}
@@ -688,6 +727,27 @@ function DraftCard({
 }
 function Message({ m, analyst = false }: { m: Msg; analyst?: boolean }) {
   const own = m.sender === "employee";
+  if (m.sender === "system" && traceOf(m.trace).kind === "handoff") {
+    const [title, ...lines] = m.body.split("\n");
+    return (
+      <div className="max-w-[600px] rounded-[10px] border border-[#F5A500] bg-[#FFF8E8] px-4 py-3 text-[13px] leading-5 text-[#1B2431]">
+        <div className="mb-1 flex items-center gap-1.5 font-semibold text-[#946300]">
+          <Headphones size={14} /> {title}
+          <span className="ml-auto text-[11px] font-normal">
+            visível só para analistas
+          </span>
+        </div>
+        {lines.map((l) => {
+          const [k, ...v] = l.split(": ");
+          return (
+            <div key={l}>
+              <strong>{k}:</strong> {v.join(": ")}
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
   return (
     <div
       className={"flex " + (own && !analyst ? "justify-end" : "justify-start")}
@@ -993,10 +1053,29 @@ function Employee({ user, onLogout }: { user: User; onLogout: () => void }) {
                         }}
                       />
                     )}
+                    {m.sender === "agent" &&
+                      m.id === state.messages.at(-1)?.id &&
+                      c?.status === "agent" &&
+                      Array.isArray(trace.quick) && (
+                        <div className="mt-2 flex max-w-[600px] flex-wrap gap-2">
+                          {(trace.quick as string[]).map((q) => (
+                            <Button
+                              key={q}
+                              variant="outline"
+                              size="sm"
+                              disabled={busy}
+                              onClick={() => act("send", undefined, q)}
+                            >
+                              {q}
+                            </Button>
+                          ))}
+                        </div>
+                      )}
                     {m.sender === "agent" && draft && (
                       <DraftCard
                         draft={draft}
                         priority={trace.priority}
+                        due={trace.dueAt as number | undefined}
                         active={active}
                         onConfirm={() => act("confirm")}
                         onCancel={() => act("cancel")}
@@ -1129,6 +1208,20 @@ function Analyst({ user, onLogout }: { user: User; onLogout: () => void }) {
       setBusy(false);
     }
   }
+  const thread = useRef<HTMLDivElement>(null),
+    lastShown = useRef<{ id: string | null; n: number }>({ id: null, n: 0 });
+  useEffect(() => {
+    const n = detail?.messages.length || 0,
+      el = thread.current;
+    if (!el || !n || detail?.conversation.id !== id) return;
+    const opened = lastShown.current.id !== id;
+    if (opened || n !== lastShown.current.n)
+      el.scrollTo({
+        top: el.scrollHeight,
+        behavior: opened ? "auto" : "smooth",
+      });
+    lastShown.current = { id, n };
+  }, [detail?.messages.length, detail?.conversation.id, id]);
   const waiting = list.filter((c) => c.status === "waiting").length;
   const filtered = list.filter(
     (c) =>
@@ -1322,7 +1415,10 @@ function Analyst({ user, onLogout }: { user: User; onLogout: () => void }) {
                   </>
                 )}
             </header>
-            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-5 lg:px-10">
+            <div
+              ref={thread}
+              className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-5 lg:px-10"
+            >
               {detail?.messages.map((m) => (
                 <Message key={m.id} m={m} analyst />
               ))}

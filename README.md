@@ -80,13 +80,13 @@ Vitest cobre prioridade e SLA, duplicidade, confirmação, privacidade, transfer
 
 ## Modelo, custo e decisões
 
-O padrão é `openai/gpt-4.1-mini`, configurável por `MASTRA_MODEL`. Foi escolhido por compatibilidade com ferramentas e saída estruturada e custo baixo para a triagem. Em outubro de 2026, a [página oficial do modelo](https://developers.openai.com/api/docs/models/gpt-4.1-mini) informa US$ 0,40 por 1 milhão de tokens de entrada e US$ 1,60 por 1 milhão de tokens de saída; a documentação oficial já o marca como deprecated, portanto `MASTRA_MODEL` deve ser revisto antes de uso em produção. Cada mensagem comum usa uma chamada de classificação, além de eventuais ferramentas locais. Confirmação, seleção de chamado e transferência explícita não chamam o modelo.
+O padrão é `openai/gpt-6-luna`, configurável por `MASTRA_MODEL`. Substitui o `gpt-4.1-mini`, que a [página de depreciações da OpenAI](https://developers.openai.com/api/docs/deprecations) marca como deprecated (desligamento em 14/01/2027, sucessor indicado: `gpt-6-luna`). É o modelo de menor custo da família atual (US$ 0,10 por 1 milhão de tokens de entrada e US$ 0,50 de saída, conforme a página de modelos em novembro de 2026), com suporte a ferramentas. A compatibilidade com a saída estruturada do Mastra ainda não foi exercitada com chave real neste repositório. Cada mensagem comum usa uma chamada de classificação, além de eventuais ferramentas locais. Confirmação, seleção de chamado e transferência explícita não chamam o modelo.
 
 ## Trade-offs e próximos passos
 
 A autenticação é intencionalmente demonstrativa: usuários seed e qualquer senha não vazia. Em produção, seria substituída por SSO corporativo, com auditoria e limites de taxa. O SQLite simplifica a execução local e não foi projetado para múltiplas instâncias. As respostas aparecem após a decisão completa do modelo, sem streaming de tokens; a atualização entre funcionário e analista usa polling de 4 segundos. A busca da base de conhecimento usa palavras-chave, sem embeddings. A detecção de duplicidade é lexical. Uma próxima versão incluiria avaliação com conversas reais anonimizadas, calibração da confiança, busca semântica e métricas de SLA.
 
-Sem `OPENAI_API_KEY`, o fluxo real do LLM não pode ser exercitado. O modo de demonstração é limitado e identificado na interface. O projeto não inclui deploy.
+O caminho do LLM real (`DEMO_MODE=false`) ainda não foi executado com uma chave: os testes automatizados usam o modo demo. O modo de demonstração é limitado e identificado na interface.
 
 ## Referências
 
