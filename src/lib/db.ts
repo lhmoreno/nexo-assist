@@ -9,14 +9,21 @@ import * as schema from "./schema";
  * ou uma URL libSQL remota (`libsql://...` do Turso, com DATABASE_AUTH_TOKEN).
  * O mesmo código roda localmente e em produção.
  */
-const raw = process.env.DATABASE_URL || "./data/nexo.sqlite";
+// A integração Turso da Vercel injeta TURSO_DATABASE_URL e TURSO_AUTH_TOKEN.
+const raw =
+  process.env.DATABASE_URL ||
+  process.env.TURSO_DATABASE_URL ||
+  "./data/nexo.sqlite";
 const remote = /^(libsql|https?|wss?):/.test(raw);
 const url = remote || raw.startsWith("file:") ? raw : `file:${raw}`;
 if (!remote)
   fs.mkdirSync(path.dirname(url.replace(/^file:/, "")), { recursive: true });
 const base: Client = createClient({
   url,
-  authToken: process.env.DATABASE_AUTH_TOKEN || undefined,
+  authToken:
+    process.env.DATABASE_AUTH_TOKEN ||
+    process.env.TURSO_AUTH_TOKEN ||
+    undefined,
 });
 const ddl = `CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY,name TEXT NOT NULL,email TEXT NOT NULL UNIQUE,role TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),expires_at INTEGER NOT NULL);

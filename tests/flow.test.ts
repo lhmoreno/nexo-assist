@@ -433,3 +433,28 @@ describe("duplicidade na conversa", () => {
     expect(draft.ticketId).toBe(open.id);
   });
 });
+
+describe("limite diário de uso", () => {
+  it("bloqueia o usuário que passa do teto e mantém os outros", async () => {
+    const who = "test-cap",
+      free = "test-cap-free";
+    for (const id of [who, free])
+      await db
+        .insert(schema.users)
+        .values({ id, name: id, email: id + "@nexo.com", role: "employee" })
+        .onConflictDoNothing();
+    process.env.DAILY_MESSAGE_LIMIT = "2";
+    try {
+      await handleChat(who, { action: "send", text: "oi" });
+      await handleChat(who, { action: "send", text: "tudo bem?" });
+      await expect(
+        handleChat(who, { action: "send", text: "ainda aqui" }),
+      ).rejects.toThrow("limite de 2 mensagens por dia");
+      await expect(
+        handleChat(free, { action: "send", text: "oi" }),
+      ).resolves.toBeDefined();
+    } finally {
+      delete process.env.DAILY_MESSAGE_LIMIT;
+    }
+  });
+});

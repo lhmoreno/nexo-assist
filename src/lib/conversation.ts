@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, count, desc, eq, gt, inArray } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { db } from "./db";
 import { conversations, messages, tickets, users } from "./schema";
@@ -93,6 +93,38 @@ async function saveDraft(id: string, draft: Draft | null) {
     .update(conversations)
     .set({ draft: draft ? JSON.stringify(draft) : null, updatedAt: Date.now() })
     .where(eq(conversations.id, id));
+}
+/**
+ * Teto de uso para proteger a chave do modelo contra abuso e custo inesperado,
+ * independente do limite de 30 mensagens por sessão (que "Nova conversa" zera).
+ */
+async function enforceDailyLimits(userId: string) {
+  const perUser = Number(process.env.DAILY_MESSAGE_LIMIT || 100),
+    global = Number(process.env.GLOBAL_DAILY_MESSAGE_LIMIT || 1000),
+    since = Date.now() - 86_400_000;
+  const [{ total }] = await db
+    .select({ total: count() })
+    .from(messages)
+    .where(and(eq(messages.sender, "employee"), gt(messages.createdAt, since)));
+  if (total >= global)
+    throw new Error(
+      "O serviço atingiu o limite diário de uso desta demonstração. Tente novamente amanhã.",
+    );
+  const [{ mine }] = await db
+    .select({ mine: count() })
+    .from(messages)
+    .innerJoin(conversations, eq(messages.conversationId, conversations.id))
+    .where(
+      and(
+        eq(conversations.userId, userId),
+        eq(messages.sender, "employee"),
+        gt(messages.createdAt, since),
+      ),
+    );
+  if (mine >= perUser)
+    throw new Error(
+      `Você atingiu o limite de ${perUser} mensagens por dia. Tente novamente amanhã.`,
+    );
 }
 type Ticket = typeof tickets.$inferSelect;
 const RELEVANT = ["knowledge", "clarify", "create", "update", "reopen"];
@@ -388,6 +420,7 @@ export async function handleChat(
   if (!text || text.length > 2000) throw new Error("Mensagem inválida.");
   if (c.messageCount >= 30)
     throw new Error("Limite de 30 mensagens nesta sessão.");
+  await enforceDailyLimits(userId);
   if (c.draft)
     throw new Error(
       "Confirme ou cancele o rascunho antes de enviar outra mensagem.",
