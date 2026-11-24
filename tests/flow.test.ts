@@ -128,7 +128,13 @@ describe("fluxos seguros", () => {
       text: "Preciso falar sobre minhas férias no RH",
     });
     expect(outside.messages.at(-1)?.body).toContain("assuntos de TI");
-    const unclear = await handleChat(user, { action: "send", text: "oi" });
+    const hello = await handleChat(user, {
+      action: "send",
+      text: "oi, tudo bem?",
+    });
+    expect(hello.conversation.status).toBe("agent");
+    expect(hello.messages.at(-1)?.body).toMatch(/Olá/);
+    const unclear = await handleChat(user, { action: "send", text: "zzz qqq" });
     expect(unclear.conversation.status).toBe("waiting");
     expect(unclear.messages.at(-1)?.trace).toContain("Baixa confiança");
   });

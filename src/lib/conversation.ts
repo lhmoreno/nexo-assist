@@ -596,7 +596,9 @@ export async function handleChat(
         body = `Preparei um rascunho para ${d.intent === "update" ? "atualizar" : "reabrir"} o chamado ${target.id}. Confira antes de confirmar.`;
         rules.push("Confirmação obrigatória", "Proprietário validado");
       }
-    } else body = "Descreva sua dúvida de TI ou escolha uma opção rápida.";
+    } else
+      body =
+        d.answer || "Descreva sua dúvida de TI ou escolha uma opção rápida.";
     // Classificação só aparece quando faz parte da ação (chamado).
     const ticketful = ["create", "update", "reopen"].includes(d.intent);
     const priority =

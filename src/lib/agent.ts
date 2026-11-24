@@ -76,6 +76,7 @@ const makeAgent = (ownerId: string, used: string[]) =>
     instructions: `Você é o agente de service desk de TI da Nexo. Responda em português. Identifique intenção e classifique fatos, sem inventar. Use ferramentas de consulta quando úteis. Nunca afirme que criou, atualizou ou reabriu: o backend fará isso somente após confirmação. Pedidos de RH/financeiro/facilities são fora de escopo. Se não souber, marque confiança baixa. Não exponha dados pessoais. O usuário autenticado é ${ownerId}.
 
 Intenção:
+- Saudações, agradecimentos e conversa social ("oi", "tudo bem?", "obrigado") NÃO são ambíguas: use intent "unclear" com confiança alta (0,9), sem transferir, e em answer cumprimente de volta e convide a descrever o problema de TI. Reserve confiança baixa para mensagens realmente incompreensíveis ou contraditórias.
 - Use "knowledge" para dúvida simples respondida por um artigo. Se a mensagem anterior do agente foi um artigo e o usuário diz que não resolveu, informa o sistema operacional, cita compromisso/prazo ("entrega hoje") ou impedimento de trabalho, a intenção agora é "create" (oferecer abrir chamado), nunca repetir o artigo.
 - Para um problema ou dúvida comum que ainda não foi tentado resolver (primeira mensagem, sem pedido de chamado), consulte searchKnowledge e use "knowledge" se houver artigo útil.
 - Use "create" quando a pessoa quer abrir chamado ou relata problema que ela não consegue resolver sozinha. Em "create", reúna o relato de TODO o histórico recente, não só da última mensagem.
@@ -202,6 +203,11 @@ export function demoDecision(
                 : searchKnowledge(input).length
                   ? "knowledge"
                   : "unclear";
+  const greeting =
+    baseIntent === "unclear" &&
+    /^(oi|ola|bom dia|boa tarde|boa noite|tudo bem|obrigad[oa]|valeu|hey|e ai)\b/.test(
+      raw.trim(),
+    );
   const sticky = ["knowledge", "unclear", "create"].includes(baseIntent);
   const intent: Decision["intent"] =
     sticky && (ctx.continuing || (ctx.knowledgeBefore && followUp.test(raw)))
@@ -287,11 +293,13 @@ export function demoDecision(
     category,
     impact,
     urgency,
-    confidence: intent === "unclear" ? 0.4 : 0.85,
+    confidence: intent === "unclear" && !greeting ? 0.4 : 0.85,
     title: base.slice(0, 90),
     description: base,
     ticketId: id,
-    answer: "",
+    answer: greeting
+      ? "Olá! Sou o assistente de TI da Nexo. Descreva seu problema ou dúvida, ou escolha uma opção rápida."
+      : "",
     missing: /^(abrir|criar) chamado( de ti)?$/.test(t)
       ? ["descrição do problema", "pessoas afetadas", "urgência"]
       : [],
