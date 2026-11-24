@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { noStore, requireUser } from "@/lib/auth";
+import { blockBots, noStore, requireUser } from "@/lib/auth";
 import { conversationState, handleChat } from "@/lib/conversation";
 const body = z.object({
   action: z.enum(["send", "confirm", "cancel", "select", "transfer", "new"]),
@@ -26,6 +26,8 @@ export async function GET() {
   }
 }
 export async function POST(req: Request) {
+  const bot = await blockBots();
+  if (bot) return bot;
   try {
     const u = await requireUser("employee");
     const input = body.parse(await req.json());

@@ -4,7 +4,7 @@ import { randomBytes } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { sessions, users } from "@/lib/schema";
-import { currentUser, noStore } from "@/lib/auth";
+import { blockBots, currentUser, noStore } from "@/lib/auth";
 import { cookies } from "next/headers";
 import { clearAnalystPresence, touchAnalyst } from "@/lib/metrics";
 const login = z.object({
@@ -13,6 +13,8 @@ const login = z.object({
   remember: z.boolean().default(true),
 });
 export async function POST(req: Request) {
+  const bot = await blockBots();
+  if (bot) return bot;
   let payload: unknown;
   try {
     payload = await req.json();
