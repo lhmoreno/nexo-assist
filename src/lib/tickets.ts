@@ -78,6 +78,7 @@ export const ticketService = {
         const duplicate = duplicateOf(
           input.title + " " + input.description,
           existing,
+          input.category,
         );
         if (duplicate) {
           const current = existing.find((t) => t.id === duplicate)!;

@@ -551,7 +551,7 @@ export async function handleChat(
             deadline: d.deadline,
             impact,
           });
-          const similar = duplicateOf(`${title} ${problem}`, owned);
+          const similar = duplicateOf(`${title} ${problem}`, owned, category);
           draft = similar
             ? { action: "update", ticketId: similar, description }
             : {

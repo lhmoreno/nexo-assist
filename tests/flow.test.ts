@@ -399,3 +399,38 @@ describe("resumo da transferência usa o estado real", () => {
     expect(summaryOf(s.conversation.id)).toContain("ainda não descreveu");
   });
 });
+
+describe("duplicidade na conversa", () => {
+  it("propõe atualizar o chamado aberto do mesmo problema", async () => {
+    const who = "test-dup-chat";
+    db.insert(schema.users)
+      .values({
+        id: who,
+        name: "Dora Dup",
+        email: who + "@nexo.com",
+        role: "employee",
+      })
+      .onConflictDoNothing()
+      .run();
+    const open = (
+      await ticketService.create({
+        ownerId: who,
+        type: "INC",
+        title: "VPN não conecta (Windows 11)",
+        description:
+          "Problema: Não consigo conectar à VPN no Windows 11.\nJá tentou: nada informado.",
+        category: "Rede e VPN",
+        impact: "pessoa",
+        urgency: "normal",
+        key: randomUUID(),
+      })
+    ).ticket;
+    const s = await handleChat(who, {
+      action: "send",
+      text: "Abrir chamado: a VPN continua sem conectar no Windows 11, já reinstalei o cliente",
+    });
+    const draft = JSON.parse(s.messages.at(-1)!.trace!).draft;
+    expect(draft.action).toBe("update");
+    expect(draft.ticketId).toBe(open.id);
+  });
+});

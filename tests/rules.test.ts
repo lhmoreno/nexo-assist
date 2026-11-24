@@ -47,3 +47,66 @@ describe("regras do service desk", () => {
     ).toBe(null);
   });
 });
+
+describe("duplicidade", () => {
+  const open = (
+    id: string,
+    title: string,
+    description: string,
+    category = "Rede e VPN",
+    status = "Aberto",
+  ) => ({ id, title, description, status, category });
+  it("reconhece o mesmo problema com outras palavras", () => {
+    const existing = [
+      open(
+        "INC-1",
+        "Notebook lento após atualização do Windows",
+        "Notebook lento após atualização do Windows",
+        "Hardware",
+      ),
+      open(
+        "INC-2",
+        "VPN não conecta (Windows 11)",
+        "Problema: Não consigo conectar à VPN no Windows 11.\nJá tentou: Reinstalou o cliente VPN.\nPrazo: entrega hoje.",
+      ),
+    ];
+    expect(
+      duplicateOf("A VPN não conecta no Windows 11", existing, "Rede e VPN"),
+    ).toBe("INC-2");
+    expect(
+      duplicateOf("Sem conexão com a VPN desde cedo", existing, "Rede e VPN"),
+    ).toBe("INC-2");
+    expect(
+      duplicateOf(
+        "Meu notebook está travando depois da atualização",
+        existing,
+        "Hardware",
+      ),
+    ).toBe("INC-1");
+  });
+  it("não confunde problemas diferentes nem usa chamados encerrados", () => {
+    const existing = [
+      open(
+        "INC-2",
+        "VPN não conecta (Windows 11)",
+        "Problema: VPN não conecta.",
+      ),
+      open(
+        "INC-3",
+        "Senha do SAP bloqueada",
+        "Senha do SAP bloqueada",
+        "Acesso",
+        "Resolvido",
+      ),
+    ];
+    expect(
+      duplicateOf("Impressora do andar não imprime", existing, "Hardware"),
+    ).toBeNull();
+    expect(
+      duplicateOf("Wi-Fi do escritório está caindo", existing, "Rede e VPN"),
+    ).toBeNull();
+    expect(
+      duplicateOf("Senha do SAP bloqueada de novo", existing, "Acesso"),
+    ).toBeNull();
+  });
+});
