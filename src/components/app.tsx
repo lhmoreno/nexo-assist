@@ -817,7 +817,7 @@ function Shell({
 }) {
   return (
     <div className="flex min-h-screen bg-white">
-      <aside className="hidden h-screen w-[232px] shrink-0 flex-col border-r border-[#E6E8EC] bg-white px-[14px] pb-[14px] pt-5 md:flex">
+      <aside className="hidden h-screen w-[232px] shrink-0 flex-col border-r border-[#E6E8EC] bg-white px-[14px] pb-14 pt-5 md:flex">
         <Logo />
         <div className="mt-[38px] space-y-[2px]">
           <button
@@ -1266,7 +1266,7 @@ function Analyst({
     tickets = detail?.tickets || [];
   return (
     <div className="flex h-screen bg-[#F6F7F9] text-[#1B2431]">
-      <aside className="hidden w-16 shrink-0 flex-col items-center gap-2 border-r border-[#E6E8EC] bg-[#F6F7F9] py-4 sm:flex">
+      <aside className="hidden w-16 shrink-0 flex-col items-center gap-2 border-r border-[#E6E8EC] bg-[#F6F7F9] pb-14 pt-4 sm:flex">
         <div className="flex size-10 items-center justify-center">
           <NexoMark size={24} />
         </div>
