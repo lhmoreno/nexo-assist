@@ -14,26 +14,30 @@ const action = z.object({
 export async function GET(req: Request) {
   try {
     const analyst = await requireUser("analyst");
-    touchAnalyst(analyst.id);
+    await touchAnalyst(analyst.id);
     const id = new URL(req.url).searchParams.get("id");
-    const list = db
-      .select()
-      .from(conversations)
-      .orderBy(desc(conversations.updatedAt))
-      .all()
-      .map((c) => ({
+    const list = await Promise.all(
+      (
+        await db
+          .select()
+          .from(conversations)
+          .orderBy(desc(conversations.updatedAt))
+      ).map(async (c) => ({
         ...c,
         employee:
-          db.select().from(users).where(eq(users.id, c.userId)).get()?.name ||
-          "Funcionário",
+          (await db.select().from(users).where(eq(users.id, c.userId)).get())
+            ?.name || "Funcionário",
         preview:
-          db
-            .select()
-            .from(messages)
-            .where(eq(messages.conversationId, c.id))
-            .orderBy(desc(messages.createdAt))
-            .get()?.body || "Conversa iniciada",
-      }));
+          (
+            await db
+              .select()
+              .from(messages)
+              .where(eq(messages.conversationId, c.id))
+              .orderBy(desc(messages.createdAt))
+              .get()
+          )?.body || "Conversa iniciada",
+      })),
+    );
     if (!id)
       return NextResponse.json(
         { conversations: list, viewer: analyst.id },
@@ -47,13 +51,13 @@ export async function GET(req: Request) {
         viewer: analyst.id,
         conversations: list,
         conversation: c,
-        messages: db
+        messages: await db
           .select()
           .from(messages)
           .where(eq(messages.conversationId, id))
           .orderBy(messages.createdAt)
           .all(),
-        tickets: db
+        tickets: await db
           .select()
           .from(tickets)
           .where(eq(tickets.ownerId, c.userId))
@@ -72,7 +76,7 @@ export async function POST(req: Request) {
   try {
     const u = await requireUser("analyst"),
       v = action.parse(await req.json());
-    const c = db
+    const c = await db
       .select()
       .from(conversations)
       .where(eq(conversations.id, v.conversationId))
@@ -81,23 +85,26 @@ export async function POST(req: Request) {
     if (v.action === "assume") {
       if (c.status !== "waiting")
         throw new Error("Conversa não está aguardando.");
-      db.update(conversations)
+      await db
+        .update(conversations)
         .set({ status: "analyst", analystId: u.id, updatedAt: Date.now() })
         .where(eq(conversations.id, c.id))
         .run();
-      addMessage(c.id, "system", `${u.name} assumiu o atendimento.`);
+      await addMessage(c.id, "system", `${u.name} assumiu o atendimento.`);
     } else {
       if (c.status !== "analyst" || c.analystId !== u.id)
         throw new Error("Assuma a conversa para continuar.");
       if (v.action === "reply") {
         if (!v.text?.trim()) throw new Error("Resposta vazia.");
-        addMessage(c.id, "analyst", v.text.trim());
-        db.update(conversations)
+        await addMessage(c.id, "analyst", v.text.trim());
+        await db
+          .update(conversations)
           .set({ updatedAt: Date.now() })
           .where(eq(conversations.id, c.id))
           .run();
       } else {
-        db.update(conversations)
+        await db
+          .update(conversations)
           .set({
             status: v.action === "return" ? "agent" : "closed",
             analystId: null,
@@ -107,7 +114,7 @@ export async function POST(req: Request) {
             and(eq(conversations.id, c.id), eq(conversations.analystId, u.id)),
           )
           .run();
-        addMessage(
+        await addMessage(
           c.id,
           "system",
           v.action === "return"

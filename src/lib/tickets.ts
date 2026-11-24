@@ -17,7 +17,7 @@ export class LegacyUnavailable extends Error {
   }
 }
 export class TicketError extends Error {}
-async function legacy<T>(operation: () => T): Promise<T> {
+async function legacy<T>(operation: () => Promise<T>): Promise<T> {
   const delay = Number(process.env.LEGACY_DELAY_MS || 0);
   if (delay > 3000) throw new LegacyUnavailable();
   if (delay) await new Promise((r) => setTimeout(r, delay));
@@ -25,20 +25,26 @@ async function legacy<T>(operation: () => T): Promise<T> {
     throw new LegacyUnavailable();
   return operation();
 }
+type Level = "Crítica" | "Alta" | "Média" | "Baixa";
+const byId = (ownerId: string, id: string) =>
+  and(eq(tickets.id, id), eq(tickets.ownerId, ownerId));
+const withNote = (
+  current: { description: string; priority: string },
+  note: string,
+  now: number,
+) => ({
+  description: `${current.description}\nAtualização: ${note}`,
+  updatedAt: now,
+  dueAt: dueAt(new Date(now), current.priority as Level).getTime(),
+});
 export const ticketService = {
   list: (ownerId: string) =>
-    legacy(() =>
-      db.select().from(tickets).where(eq(tickets.ownerId, ownerId)).all(),
-    ),
+    legacy(() => db.select().from(tickets).where(eq(tickets.ownerId, ownerId))),
   get: (ownerId: string, id: string) =>
-    legacy(
-      () =>
-        db
-          .select()
-          .from(tickets)
-          .where(and(eq(tickets.id, id), eq(tickets.ownerId, ownerId)))
-          .get() ?? null,
-    ),
+    legacy(async () => {
+      const [t] = await db.select().from(tickets).where(byId(ownerId, id));
+      return t ?? null;
+    }),
   async create(input: {
     ownerId: string;
     type: "INC" | "REQ";
@@ -50,29 +56,25 @@ export const ticketService = {
     key: string;
   }) {
     return legacy(() =>
-      db.transaction((tx) => {
-        const prior = tx
+      db.transaction(async (tx) => {
+        const one = async (id: string) =>
+          (await tx.select().from(tickets).where(eq(tickets.id, id)))[0]!;
+        const [prior] = await tx
           .select()
           .from(ticketOperations)
-          .where(eq(ticketOperations.key, input.key))
-          .get();
+          .where(eq(ticketOperations.key, input.key));
         if (prior) {
           if (prior.ownerId !== input.ownerId)
             throw new TicketError("Operação não autorizada.");
           return {
-            ticket: tx
-              .select()
-              .from(tickets)
-              .where(eq(tickets.id, prior.ticketId))
-              .get()!,
+            ticket: await one(prior.ticketId),
             duplicate: prior.duplicate,
           };
         }
-        const existing = tx
+        const existing = await tx
           .select()
           .from(tickets)
-          .where(eq(tickets.ownerId, input.ownerId))
-          .all();
+          .where(eq(tickets.ownerId, input.ownerId));
         const same = existing.find((t) => t.idempotencyKey === input.key);
         if (same) return { ticket: same, duplicate: false };
         const duplicate = duplicateOf(
@@ -82,132 +84,94 @@ export const ticketService = {
         );
         if (duplicate) {
           const current = existing.find((t) => t.id === duplicate)!;
-          const now = Date.now();
-          tx.update(tickets)
-            .set({
-              description: `${current.description}\nAtualização: ${input.description}`,
-              updatedAt: now,
-              dueAt: dueAt(
-                new Date(now),
-                current.priority as "Crítica" | "Alta" | "Média" | "Baixa",
-              ).getTime(),
-            })
-            .where(eq(tickets.id, duplicate))
-            .run();
-          tx.insert(ticketOperations)
-            .values({
-              key: input.key,
-              ownerId: input.ownerId,
-              ticketId: duplicate,
-              duplicate: true,
-            })
-            .run();
-          return {
-            ticket: tx
-              .select()
-              .from(tickets)
-              .where(eq(tickets.id, duplicate))
-              .get()!,
+          await tx
+            .update(tickets)
+            .set(withNote(current, input.description, Date.now()))
+            .where(eq(tickets.id, duplicate));
+          await tx.insert(ticketOperations).values({
+            key: input.key,
+            ownerId: input.ownerId,
+            ticketId: duplicate,
             duplicate: true,
-          };
+          });
+          return { ticket: await one(duplicate), duplicate: true };
         }
         const priority = priorityFor(input.impact, input.urgency, input.type),
           now = Date.now();
         const id = `${input.type}-${Math.floor(10000 + Math.random() * 89999)}`;
-        tx.insert(tickets)
-          .values({
-            id,
-            ownerId: input.ownerId,
-            type: input.type,
-            title: input.title,
-            description: input.description,
-            category: input.category,
-            impact: input.impact,
-            urgency: input.urgency,
-            priority,
-            status: "Aberto",
-            dueAt: dueAt(new Date(now), priority).getTime(),
-            createdAt: now,
-            updatedAt: now,
-            idempotencyKey: input.key,
-          })
-          .run();
-        tx.insert(ticketOperations)
-          .values({
-            key: input.key,
-            ownerId: input.ownerId,
-            ticketId: id,
-            duplicate: false,
-          })
-          .run();
-        return {
-          ticket: tx.select().from(tickets).where(eq(tickets.id, id)).get()!,
+        await tx.insert(tickets).values({
+          id,
+          ownerId: input.ownerId,
+          type: input.type,
+          title: input.title,
+          description: input.description,
+          category: input.category,
+          impact: input.impact,
+          urgency: input.urgency,
+          priority,
+          status: "Aberto",
+          dueAt: dueAt(new Date(now), priority).getTime(),
+          createdAt: now,
+          updatedAt: now,
+          idempotencyKey: input.key,
+        });
+        await tx.insert(ticketOperations).values({
+          key: input.key,
+          ownerId: input.ownerId,
+          ticketId: id,
           duplicate: false,
-        };
+        });
+        return { ticket: await one(id), duplicate: false };
       }),
     );
   },
   update: (ownerId: string, id: string, note: string) =>
-    legacy(() => {
-      const current = db
+    legacy(async () => {
+      const [current] = await db
         .select()
         .from(tickets)
-        .where(and(eq(tickets.id, id), eq(tickets.ownerId, ownerId)))
-        .get();
+        .where(byId(ownerId, id));
       if (!current) throw new TicketError("Chamado não encontrado.");
       if (["Resolvido", "Fechado", "Aprovado"].includes(current.status))
         throw new TicketError("Chamado resolvido: solicite reabertura.");
-      const now = Date.now();
-      db.update(tickets)
-        .set({
-          description: current.description + "\nAtualização: " + note,
-          updatedAt: now,
-          dueAt: dueAt(
-            new Date(now),
-            current.priority as "Crítica" | "Alta" | "Média" | "Baixa",
-          ).getTime(),
-        })
-        .where(eq(tickets.id, id))
-        .run();
-      return db.select().from(tickets).where(eq(tickets.id, id)).get()!;
+      await db
+        .update(tickets)
+        .set(withNote(current, note, Date.now()))
+        .where(eq(tickets.id, id));
+      return (await db.select().from(tickets).where(eq(tickets.id, id)))[0]!;
     }),
   reopen: (ownerId: string, id: string) =>
-    legacy(() => {
-      const current = db
+    legacy(async () => {
+      const [current] = await db
         .select()
         .from(tickets)
-        .where(and(eq(tickets.id, id), eq(tickets.ownerId, ownerId)))
-        .get();
+        .where(byId(ownerId, id));
       if (!current) throw new TicketError("Chamado não encontrado.");
       if (!canReopen(current.resolvedAt))
         throw new TicketError("O prazo de 7 dias para reabertura terminou.");
       const now = Date.now();
-      db.update(tickets)
+      await db
+        .update(tickets)
         .set({
           status: "Reaberto",
           resolvedAt: null,
           updatedAt: now,
-          dueAt: dueAt(
-            new Date(now),
-            current.priority as "Crítica" | "Alta" | "Média" | "Baixa",
-          ).getTime(),
+          dueAt: dueAt(new Date(now), current.priority as Level).getTime(),
         })
-        .where(eq(tickets.id, id))
-        .run();
-      return db.select().from(tickets).where(eq(tickets.id, id)).get()!;
+        .where(eq(tickets.id, id));
+      return (await db.select().from(tickets).where(eq(tickets.id, id)))[0]!;
     }),
   transfer: (ownerId: string, id: string) =>
-    legacy(() => {
-      const current = db
+    legacy(async () => {
+      const [current] = await db
         .select()
         .from(tickets)
-        .where(and(eq(tickets.id, id), eq(tickets.ownerId, ownerId)))
-        .get();
+        .where(byId(ownerId, id));
       if (!current) throw new TicketError("Chamado não encontrado.");
-      db.update(tickets)
+      await db
+        .update(tickets)
         .set({ status: "Aguardando analista", updatedAt: Date.now() })
-        .where(eq(tickets.id, id))
-        .run();
+        .where(eq(tickets.id, id));
       return current;
     }),
 };

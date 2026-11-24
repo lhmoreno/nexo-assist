@@ -12,7 +12,7 @@ export async function GET() {
     const u = await requireUser("employee");
     return NextResponse.json(
       {
-        ...conversationState(u.id),
+        ...(await conversationState(u.id)),
         viewer: u.id,
         demo: process.env.DEMO_MODE === "true",
       },

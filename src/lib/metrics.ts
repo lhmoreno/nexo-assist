@@ -73,25 +73,27 @@ export function aggregateMetrics(
   };
 }
 
-export function getServiceMetrics(now = Date.now()): ServiceMetrics {
+export async function getServiceMetrics(
+  now = Date.now(),
+): Promise<ServiceMetrics> {
   return aggregateMetrics(
-    db.select().from(conversations).all(),
-    db.select().from(messages).all(),
-    db.select().from(analystPresence).all(),
+    await db.select().from(conversations),
+    await db.select().from(messages),
+    await db.select().from(analystPresence),
     now,
   );
 }
 
-export function touchAnalyst(userId: string) {
-  db.insert(analystPresence)
+export async function touchAnalyst(userId: string) {
+  await db
+    .insert(analystPresence)
     .values({ userId, lastSeenAt: Date.now() })
     .onConflictDoUpdate({
       target: analystPresence.userId,
       set: { lastSeenAt: Date.now() },
-    })
-    .run();
+    });
 }
 
-export function clearAnalystPresence(userId: string) {
-  db.delete(analystPresence).where(eq(analystPresence.userId, userId)).run();
+export async function clearAnalystPresence(userId: string) {
+  await db.delete(analystPresence).where(eq(analystPresence.userId, userId));
 }

@@ -17,10 +17,10 @@ beforeAll(async () => {
   ({ ticketService } = await import("../src/lib/tickets"));
   ({ handleChat, conversationState } = await import("../src/lib/conversation"));
   for (const id of [user, other])
-    db.insert(schema.users)
+    await db
+      .insert(schema.users)
       .values({ id, name: id, email: id + "@nexo.com", role: "employee" })
-      .onConflictDoNothing()
-      .run();
+      .onConflictDoNothing();
 });
 afterAll(() => {
   for (const ext of ["", "-wal", "-shm"])
@@ -104,11 +104,9 @@ describe("fluxos seguros", () => {
     expect(state.messages.some((m) => m.body.startsWith("Resumo"))).toBe(false);
     const conv = state.conversation.id;
     expect(
-      db
-        .select()
-        .from(schema.messages)
-        .all()
-        .some((m) => m.conversationId === conv && m.body.startsWith("Resumo")),
+      (await db.select().from(schema.messages)).some(
+        (m) => m.conversationId === conv && m.body.startsWith("Resumo"),
+      ),
     ).toBe(true);
     const human = await handleChat(other, { action: "send", text: "ajuda" });
     expect(human.messages.at(-1)?.sender).toBe("employee");
@@ -120,7 +118,7 @@ describe("fluxos seguros", () => {
       "temporariamente indisponível",
     );
     process.env.LEGACY_FAILURE_RATE = "0";
-    expect(conversationState(user).tickets).toBeDefined();
+    expect((await conversationState(user)).tickets).toBeDefined();
   });
   it("redireciona assunto fora de TI e pede contexto ambíguo", async () => {
     const outside = await handleChat(user, {
@@ -156,15 +154,15 @@ describe("reabertura e idempotência", () => {
       })
     ).ticket;
     const { eq } = await import("drizzle-orm");
-    db.update(schema.tickets)
+    await db
+      .update(schema.tickets)
       .set({ status: "Resolvido", resolvedAt: Date.now() - 6 * 86400000 })
-      .where(eq(schema.tickets.id, t.id))
-      .run();
+      .where(eq(schema.tickets.id, t.id));
     expect((await ticketService.reopen(user, t.id)).status).toBe("Reaberto");
-    db.update(schema.tickets)
+    await db
+      .update(schema.tickets)
       .set({ status: "Resolvido", resolvedAt: Date.now() - 8 * 86400000 })
-      .where(eq(schema.tickets.id, t.id))
-      .run();
+      .where(eq(schema.tickets.id, t.id));
     await expect(ticketService.reopen(user, t.id)).rejects.toThrow("7 dias");
   });
 });
@@ -173,24 +171,24 @@ describe("limite de sessão", () => {
   it("preserva a 30ª resposta e só inicia outra sessão por ação explícita", async () => {
     const { eq } = await import("drizzle-orm");
     const id = "test-limit";
-    db.insert(schema.users)
+    await db
+      .insert(schema.users)
       .values({ id, name: id, email: id + "@nexo.com", role: "employee" })
-      .onConflictDoNothing()
-      .run();
-    db.insert(schema.articles)
+      .onConflictDoNothing();
+    await db
+      .insert(schema.articles)
       .values({
         id: "test-vpn",
         title: "VPN erro 809",
         body: "Reinstale o cliente VPN.",
         keywords: "vpn 809 rede",
       })
-      .onConflictDoNothing()
-      .run();
-    const initial = conversationState(id);
-    db.update(schema.conversations)
+      .onConflictDoNothing();
+    const initial = await conversationState(id);
+    await db
+      .update(schema.conversations)
       .set({ messageCount: 29 })
-      .where(eq(schema.conversations.id, initial.conversation.id))
-      .run();
+      .where(eq(schema.conversations.id, initial.conversation.id));
     const last = await handleChat(id, {
       action: "send",
       text: "Como resolver erro 809 na VPN?",
@@ -211,15 +209,15 @@ describe("consulta de chamado vencido", () => {
   it("permite selecionar o chamado antes da transferência", async () => {
     const { eq } = await import("drizzle-orm");
     const owner = "test-overdue";
-    db.insert(schema.users)
+    await db
+      .insert(schema.users)
       .values({
         id: owner,
         name: owner,
         email: owner + "@nexo.com",
         role: "employee",
       })
-      .onConflictDoNothing()
-      .run();
+      .onConflictDoNothing();
     const t = (
       await ticketService.create({
         ownerId: owner,
@@ -232,10 +230,10 @@ describe("consulta de chamado vencido", () => {
         key: randomUUID(),
       })
     ).ticket;
-    db.update(schema.tickets)
+    await db
+      .update(schema.tickets)
       .set({ dueAt: Date.now() - 1000 })
-      .where(eq(schema.tickets.id, t.id))
-      .run();
+      .where(eq(schema.tickets.id, t.id));
     const listed = await handleChat(owner, {
       action: "send",
       text: "Quero consultar o status dos meus chamados",
@@ -253,34 +251,34 @@ describe("consulta de chamado vencido", () => {
 
 describe("jornada de abertura (Anexo B)", () => {
   const who = "test-journey";
-  beforeAll(() => {
-    db.insert(schema.users)
+  beforeAll(async () => {
+    await db
+      .insert(schema.users)
       .values({
         id: who,
         name: "Jo Jornada",
         email: who + "@nexo.com",
         role: "employee",
       })
-      .onConflictDoNothing()
-      .run();
-    db.insert(schema.users)
+      .onConflictDoNothing();
+    await db
+      .insert(schema.users)
       .values({
         id: "test-bruno",
         name: "Bruno Teste",
         email: "tb@nexo.com",
         role: "employee",
       })
-      .onConflictDoNothing()
-      .run();
-    db.insert(schema.articles)
+      .onConflictDoNothing();
+    await db
+      .insert(schema.articles)
       .values({
         id: "test-vpn2",
         title: "VPN não conecta",
         body: "Reinstale o cliente VPN.",
         keywords: "vpn conecta",
       })
-      .onConflictDoNothing()
-      .run();
+      .onConflictDoNothing();
   });
   it("oferece chamado após o artigo, pergunta o que já tentou e mostra tipo e prazo", async () => {
     const art = await handleChat(who, {
@@ -335,12 +333,10 @@ describe("jornada de abertura (Anexo B)", () => {
   });
   it("resumo da transferência traz chamado, problema, prioridade e tentativas", async () => {
     await handleChat(who, { action: "transfer" });
-    const conv = conversationState(who).conversation.id;
-    const summary = db
-      .select()
-      .from(schema.messages)
-      .all()
-      .find((m) => m.conversationId === conv && m.body.startsWith("Resumo"))!;
+    const conv = (await conversationState(who)).conversation.id;
+    const summary = (await db.select().from(schema.messages)).find(
+      (m) => m.conversationId === conv && m.body.startsWith("Resumo"),
+    )!;
     expect(summary.body).toMatch(/Chamado: INC-/);
     expect(summary.body).toContain("Prioridade: Alta");
     expect(summary.body).toContain("Já tentado: Reinstalou");
@@ -349,33 +345,30 @@ describe("jornada de abertura (Anexo B)", () => {
 });
 
 describe("resumo da transferência usa o estado real", () => {
-  const summaryOf = (conv: string) =>
-    db
-      .select()
-      .from(schema.messages)
-      .all()
+  const summaryOf = async (conv: string) =>
+    (await db.select().from(schema.messages))
       .filter((m) => m.conversationId === conv && m.body.startsWith("Resumo"))
       .at(-1)!.body;
   it("usa o problema descrito, não o pedido de transferência, e omite prioridade não classificada", async () => {
     const who = "test-summary";
-    db.insert(schema.articles)
+    await db
+      .insert(schema.articles)
       .values({
         id: "test-outlook",
         title: "Outlook no celular",
         body: "Instale o app Outlook e entre com o e-mail corporativo.",
         keywords: "outlook celular configuro",
       })
-      .onConflictDoNothing()
-      .run();
-    db.insert(schema.users)
+      .onConflictDoNothing();
+    await db
+      .insert(schema.users)
       .values({
         id: who,
         name: "Sofia Resumo",
         email: who + "@nexo.com",
         role: "employee",
       })
-      .onConflictDoNothing()
-      .run();
+      .onConflictDoNothing();
     await handleChat(who, {
       action: "send",
       text: "Como configuro o Outlook no celular?",
@@ -384,7 +377,7 @@ describe("resumo da transferência usa o estado real", () => {
       action: "send",
       text: "Quero falar com um analista",
     });
-    const body = summaryOf(s.conversation.id);
+    const body = await summaryOf(s.conversation.id);
     expect(body).toContain("Chamado: nenhum associado");
     expect(body).toContain("Problema: Como configuro o Outlook no celular?");
     expect(body).not.toContain("Quero falar com um analista");
@@ -392,32 +385,32 @@ describe("resumo da transferência usa o estado real", () => {
   });
   it("sem relato de TI, diz que não há problema descrito", async () => {
     const who = "test-summary-empty";
-    db.insert(schema.users)
+    await db
+      .insert(schema.users)
       .values({
         id: who,
         name: "Zeca Vazio",
         email: who + "@nexo.com",
         role: "employee",
       })
-      .onConflictDoNothing()
-      .run();
+      .onConflictDoNothing();
     const s = await handleChat(who, { action: "transfer" });
-    expect(summaryOf(s.conversation.id)).toContain("ainda não descreveu");
+    expect(await summaryOf(s.conversation.id)).toContain("ainda não descreveu");
   });
 });
 
 describe("duplicidade na conversa", () => {
   it("propõe atualizar o chamado aberto do mesmo problema", async () => {
     const who = "test-dup-chat";
-    db.insert(schema.users)
+    await db
+      .insert(schema.users)
       .values({
         id: who,
         name: "Dora Dup",
         email: who + "@nexo.com",
         role: "employee",
       })
-      .onConflictDoNothing()
-      .run();
+      .onConflictDoNothing();
     const open = (
       await ticketService.create({
         ownerId: who,

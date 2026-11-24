@@ -50,12 +50,9 @@ export type DecideContext = {
   otherNames: string[];
 };
 export type Decision = z.infer<typeof intentSchema>;
-export function searchKnowledge(query: string) {
+export async function searchKnowledge(query: string) {
   const q = new Set(normalize(query).split(" "));
-  return db
-    .select()
-    .from(articles)
-    .all()
+  return (await db.select().from(articles))
     .map((a) => ({
       article: a,
       score: [...q].filter((x) =>
@@ -95,7 +92,7 @@ Perguntas: se ainda faltar algo que ajude o analista e que o usuário não disse
         ),
         execute: async ({ query }) => {
           used.push("searchKnowledge");
-          return searchKnowledge(query).map((a) => ({
+          return (await searchKnowledge(query)).map((a) => ({
             title: a.title,
             body: a.body,
           }));
@@ -139,7 +136,11 @@ export async function decide(
 ): Promise<{ decision: Decision; tools: string[]; mode: "mastra" | "demo" }> {
   const used: string[] = [];
   if (process.env.DEMO_MODE === "true")
-    return { decision: demoDecision(input, ctx), tools: used, mode: "demo" };
+    return {
+      decision: await demoDecision(input, ctx),
+      tools: used,
+      mode: "demo",
+    };
   if (!process.env.OPENAI_API_KEY)
     throw new Error("Configure OPENAI_API_KEY ou ative DEMO_MODE=true.");
   const result = await makeAgent(ownerId, used).generate(
@@ -157,7 +158,7 @@ const followUp =
 function tidy(x: string) {
   return normalize(x) ? x : "";
 }
-export function demoDecision(
+export async function demoDecision(
   rawInput: string,
   ctx: DecideContext = {
     continuing: false,
@@ -165,8 +166,9 @@ export function demoDecision(
     thread: [],
     otherNames: [],
   },
-): Decision {
+): Promise<Decision> {
   const input = rawInput,
+    hasArticle = (await searchKnowledge(rawInput)).length > 0,
     t = normalize(input),
     raw = ` ${input
       .normalize("NFD")
@@ -200,7 +202,7 @@ export function demoDecision(
                   t.includes("criar") ||
                   t.includes("problema")
                 ? "create"
-                : searchKnowledge(input).length
+                : hasArticle
                   ? "knowledge"
                   : "unclear";
   const greeting =

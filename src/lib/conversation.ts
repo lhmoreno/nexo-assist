@@ -35,30 +35,28 @@ const parse = (raw: string | null): Record<string, unknown> => {
   }
 };
 export const isHandoff = (raw: string | null) => parse(raw).kind === "handoff";
-export function addMessage(
+export async function addMessage(
   conversationId: string,
   sender: "employee" | "agent" | "analyst" | "system",
   body: string,
   trace?: object,
 ) {
-  db.insert(messages)
-    .values({
-      id: randomUUID(),
-      conversationId,
-      sender,
-      body,
-      trace: trace ? JSON.stringify(trace) : null,
-      createdAt: Date.now(),
-    })
-    .run();
+  await db.insert(messages).values({
+    id: randomUUID(),
+    conversationId,
+    sender,
+    body,
+    trace: trace ? JSON.stringify(trace) : null,
+    createdAt: Date.now(),
+  });
 }
-export function getConversation(userId: string) {
-  let c = db
+export async function getConversation(userId: string) {
+  let [c] = await db
     .select()
     .from(conversations)
     .where(eq(conversations.userId, userId))
     .orderBy(desc(conversations.updatedAt))
-    .get();
+    .limit(1);
   if (!c || c.status === "closed") {
     const now = Date.now();
     c = {
@@ -71,40 +69,39 @@ export function getConversation(userId: string) {
       createdAt: now,
       updatedAt: now,
     };
-    db.insert(conversations).values(c).run();
+    await db.insert(conversations).values(c);
   }
   return c;
 }
-export function conversationState(userId: string) {
-  const c = getConversation(userId);
+export async function conversationState(userId: string) {
+  const c = await getConversation(userId);
   return {
     conversation: c,
     // O resumo da transferência é só para o console do analista.
-    messages: db
-      .select()
-      .from(messages)
-      .where(eq(messages.conversationId, c.id))
-      .orderBy(messages.createdAt)
-      .all()
-      .filter((m) => !isHandoff(m.trace)),
-    tickets: db.select().from(tickets).where(eq(tickets.ownerId, userId)).all(),
+    messages: (
+      await db
+        .select()
+        .from(messages)
+        .where(eq(messages.conversationId, c.id))
+        .orderBy(messages.createdAt)
+    ).filter((m) => !isHandoff(m.trace)),
+    tickets: await db.select().from(tickets).where(eq(tickets.ownerId, userId)),
   };
 }
-function saveDraft(id: string, draft: Draft | null) {
-  db.update(conversations)
+async function saveDraft(id: string, draft: Draft | null) {
+  await db
+    .update(conversations)
     .set({ draft: draft ? JSON.stringify(draft) : null, updatedAt: Date.now() })
-    .where(eq(conversations.id, id))
-    .run();
+    .where(eq(conversations.id, id));
 }
 type Ticket = typeof tickets.$inferSelect;
 const RELEVANT = ["knowledge", "clarify", "create", "update", "reopen"];
-function transfer(id: string, reason: string, ticket?: Ticket) {
-  const asc = db
+async function transfer(id: string, reason: string, ticket?: Ticket) {
+  const asc = await db
     .select()
     .from(messages)
     .where(eq(messages.conversationId, id))
-    .orderBy(messages.createdAt)
-    .all();
+    .orderBy(messages.createdAt);
   // Problema = última mensagem do funcionário que o agente tratou como relato
   // de TI. O pedido de transferência não tem resposta do agente e fica de fora.
   let problemText: string | undefined;
@@ -130,20 +127,21 @@ function transfer(id: string, reason: string, ticket?: Ticket) {
     .flatMap((m) => m.body.match(/(?:INC|REQ)-\d+/gi) ?? [])
     .at(-1)
     ?.toUpperCase();
-  const ownerId = db
+  const [owner] = await db
     .select()
     .from(conversations)
-    .where(eq(conversations.id, id))
-    .get()?.userId;
+    .where(eq(conversations.id, id));
+  const ownerId = owner?.userId;
   const t =
     ticket ??
     (latest?.ticket as Ticket | undefined) ??
     (mentioned && ownerId
-      ? db
-          .select()
-          .from(tickets)
-          .where(and(eq(tickets.id, mentioned), eq(tickets.ownerId, ownerId)))
-          .get()
+      ? (
+          await db
+            .select()
+            .from(tickets)
+            .where(and(eq(tickets.id, mentioned), eq(tickets.ownerId, ownerId)))
+        )[0]
       : undefined);
   const d = t ? undefined : (latest?.draft as Draft | undefined);
   const line = (label: string, text?: string | null) =>
@@ -176,27 +174,28 @@ function transfer(id: string, reason: string, ticket?: Ticket) {
   ]
     .filter(Boolean)
     .join("\n");
-  addMessage(id, "system", text, { kind: "handoff" });
-  db.update(conversations)
+  await addMessage(id, "system", text, { kind: "handoff" });
+  await db
+    .update(conversations)
     .set({ status: "waiting", draft: null, updatedAt: Date.now() })
-    .where(eq(conversations.id, id))
-    .run();
+    .where(eq(conversations.id, id));
   return `Encaminhei sua conversa para um analista. Motivo: ${reason}. O agente ficará pausado até o atendimento ser devolvido.`;
 }
-function emit(
+async function emit(
   cId: string,
   body: string,
   trace: Record<string, unknown>,
   started: number,
 ) {
-  addMessage(cId, "agent", body, {
+  await addMessage(cId, "agent", body, {
     ...trace,
     executionMs: Date.now() - started,
   });
-  return conversationState(
-    db.select().from(conversations).where(eq(conversations.id, cId)).get()!
-      .userId,
-  );
+  const [row] = await db
+    .select()
+    .from(conversations)
+    .where(eq(conversations.id, cId));
+  return await conversationState(row!.userId);
 }
 export async function handleChat(
   userId: string,
@@ -206,24 +205,22 @@ export async function handleChat(
     ticketId?: string;
   },
 ) {
-  const c = getConversation(userId),
+  const c = await getConversation(userId),
     started = Date.now();
   if (input.action === "new") {
     if (c.status !== "agent" || c.messageCount < 30 || c.draft)
       throw new Error("Esta conversa ainda está em andamento.");
-    db.insert(conversations)
-      .values({
-        id: randomUUID(),
-        userId,
-        status: "agent",
-        analystId: null,
-        draft: null,
-        messageCount: 0,
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      })
-      .run();
-    return conversationState(userId);
+    await db.insert(conversations).values({
+      id: randomUUID(),
+      userId,
+      status: "agent",
+      analystId: null,
+      draft: null,
+      messageCount: 0,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+    return await conversationState(userId);
   }
   if (c.status !== "agent") {
     if (input.action !== "send")
@@ -231,12 +228,12 @@ export async function handleChat(
     const humanText = (input.text || "").trim();
     if (!humanText || humanText.length > 2000)
       throw new Error("Mensagem inválida.");
-    addMessage(c.id, "employee", humanText);
-    db.update(conversations)
+    await addMessage(c.id, "employee", humanText);
+    await db
+      .update(conversations)
       .set({ updatedAt: Date.now() })
-      .where(eq(conversations.id, c.id))
-      .run();
-    return conversationState(userId);
+      .where(eq(conversations.id, c.id));
+    return await conversationState(userId);
   }
   if (input.action === "confirm" || input.action === "cancel") {
     const draft =
@@ -244,21 +241,20 @@ export async function handleChat(
         ? (JSON.parse(c.draft) as Draft)
         : null;
     if (!draft) throw new Error("Não há operação pendente de confirmação.");
-    const locked = db
+    const [locked] = await db
       .update(conversations)
       .set({ draft: "__processing__" })
       .where(and(eq(conversations.id, c.id), eq(conversations.draft, c.draft!)))
-      .returning({ id: conversations.id })
-      .get();
+      .returning({ id: conversations.id });
     if (!locked) throw new Error("A operação já está sendo processada.");
-    addMessage(
+    await addMessage(
       c.id,
       "employee",
       input.action === "confirm" ? "Confirmar" : "Cancelar",
     );
     if (input.action === "cancel") {
-      saveDraft(c.id, null);
-      return emit(
+      await saveDraft(c.id, null);
+      return await emit(
         c.id,
         "Operação cancelada. Nenhum chamado foi alterado.",
         {
@@ -291,7 +287,7 @@ export async function handleChat(
         if (!result.duplicate && result.ticket.priority === "Crítica") {
           await ticketService.transfer(userId, result.ticket.id);
           body += " Atendimento crítico: um analista foi acionado.";
-          transfer(c.id, "chamado crítico", result.ticket);
+          await transfer(c.id, "chamado crítico", result.ticket);
         }
       } else if (draft.action === "update") {
         const t = await ticketService.update(
@@ -306,8 +302,8 @@ export async function handleChat(
         created = t;
         body = `Reabri o chamado ${t.id}. Prazo: ${formatDue(t.dueAt)}.`;
       }
-      saveDraft(c.id, null);
-      return emit(
+      await saveDraft(c.id, null);
+      return await emit(
         c.id,
         body,
         {
@@ -324,8 +320,8 @@ export async function handleChat(
         started,
       );
     } catch (e) {
-      saveDraft(c.id, draft);
-      return emit(
+      await saveDraft(c.id, draft);
+      return await emit(
         c.id,
         e instanceof Error ? e.message : "Erro no serviço de chamados.",
         {
@@ -341,9 +337,10 @@ export async function handleChat(
   if (input.action === "select") {
     const t = await ticketService.get(userId, input.ticketId || "");
     if (!t) throw new Error("Chamado não encontrado.");
-    addMessage(c.id, "employee", `Selecionar ${t.id}`);
-    if (isOverdue(t.dueAt, t.status)) transfer(c.id, "chamado vencido", t);
-    return emit(
+    await addMessage(c.id, "employee", `Selecionar ${t.id}`);
+    if (isOverdue(t.dueAt, t.status))
+      await transfer(c.id, "chamado vencido", t);
+    return await emit(
       c.id,
       isOverdue(t.dueAt, t.status)
         ? "Esse chamado passou do prazo de atualização. Encaminhei a conversa para um analista."
@@ -372,9 +369,9 @@ export async function handleChat(
     );
   }
   if (input.action === "transfer") {
-    addMessage(c.id, "employee", "Falar com analista");
-    const body = transfer(c.id, "solicitação do funcionário");
-    return emit(
+    await addMessage(c.id, "employee", "Falar com analista");
+    const body = await transfer(c.id, "solicitação do funcionário");
+    return await emit(
       c.id,
       body,
       {
@@ -395,24 +392,25 @@ export async function handleChat(
     throw new Error(
       "Confirme ou cancele o rascunho antes de enviar outra mensagem.",
     );
-  addMessage(c.id, "employee", text);
-  db.update(conversations)
+  await addMessage(c.id, "employee", text);
+  await db
+    .update(conversations)
     .set({ messageCount: c.messageCount + 1, updatedAt: Date.now() })
-    .where(eq(conversations.id, c.id))
-    .run();
-  const ids = db
-    .select({ id: conversations.id })
-    .from(conversations)
-    .where(eq(conversations.userId, userId))
-    .all()
-    .map((x) => x.id);
-  const history = db
-    .select()
-    .from(messages)
-    .where(inArray(messages.conversationId, ids))
-    .orderBy(desc(messages.createdAt))
-    .limit(8)
-    .all()
+    .where(eq(conversations.id, c.id));
+  const ids = (
+    await db
+      .select({ id: conversations.id })
+      .from(conversations)
+      .where(eq(conversations.userId, userId))
+  ).map((x) => x.id);
+  const history = (
+    await db
+      .select()
+      .from(messages)
+      .where(inArray(messages.conversationId, ids))
+      .orderBy(desc(messages.createdAt))
+      .limit(8)
+  )
     .reverse()
     .filter((m) => !isHandoff(m.trace))
     .map((m) => `${m.sender}: ${m.body}`);
@@ -420,12 +418,11 @@ export async function handleChat(
   const thread: string[] = [];
   let lastAgent: { intent?: string; body: string } | undefined,
     rounds = 0;
-  for (const m of db
+  for (const m of await db
     .select()
     .from(messages)
     .where(eq(messages.conversationId, c.id))
-    .orderBy(desc(messages.createdAt))
-    .all()) {
+    .orderBy(desc(messages.createdAt))) {
     if (m.sender === "employee") {
       if (!QUICK.test(m.body)) thread.unshift(m.body);
     } else if (m.sender === "agent") {
@@ -446,11 +443,9 @@ export async function handleChat(
       !!lastAgent?.body.startsWith("Para preparar o chamado"),
     knowledgeBefore: lastAgent?.intent === "knowledge",
     thread,
-    otherNames: db
-      .select()
-      .from(users)
-      .where(eq(users.role, "employee"))
-      .all()
+    otherNames: (
+      await db.select().from(users).where(eq(users.role, "employee"))
+    )
       .filter((u) => u.id !== userId)
       .map((u) => u.name.split(" ")[0]),
   };
@@ -483,7 +478,7 @@ export async function handleChat(
         ? owned[0]
         : null);
     if (d.intent === "transfer") {
-      body = transfer(c.id, "solicitação do funcionário");
+      body = await transfer(c.id, "solicitação do funcionário");
       rules.push("Transferência solicitada");
     } else if (d.intent === "outside") {
       body =
@@ -498,7 +493,7 @@ export async function handleChat(
       rules.push("Consulta restrita ao proprietário");
       denied = true;
     } else if (d.confidence < 0.55) {
-      body = transfer(c.id, "classificação com baixa confiança");
+      body = await transfer(c.id, "classificação com baixa confiança");
       rules.push("Baixa confiança");
     } else if (d.intent === "list") {
       results = open.map((t) => `${t.id}: ${t.status}`);
@@ -511,7 +506,7 @@ export async function handleChat(
         rules.push("Prazo dos chamados verificado");
       }
     } else if (d.intent === "knowledge") {
-      const found = searchKnowledge(text);
+      const found = await searchKnowledge(text);
       tools.push("searchKnowledge");
       results = found.map((x) => x.title);
       body = found.length
@@ -565,7 +560,7 @@ export async function handleChat(
                 problem,
                 tried: d.tried,
               };
-          saveDraft(c.id, draft);
+          await saveDraft(c.id, draft);
           dueMs = dueAt(new Date(), priority).getTime();
           body = similar
             ? `Encontrei o chamado aberto ${similar} para o mesmo problema. Preparei uma atualização; confira e confirme antes de alterar.`
@@ -592,7 +587,7 @@ export async function handleChat(
           ticketId: target.id,
           description: d.description || text,
         };
-        saveDraft(c.id, draft);
+        await saveDraft(c.id, draft);
         body = `Preparei um rascunho para ${d.intent === "update" ? "atualizar" : "reabrir"} o chamado ${target.id}. Confira antes de confirmar.`;
         rules.push("Confirmação obrigatória", "Proprietário validado");
       }
@@ -605,7 +600,7 @@ export async function handleChat(
       d.intent === "create" && d.impact && d.urgency
         ? priorityFor(d.impact, d.urgency, d.type || "INC")
         : null;
-    return emit(
+    return await emit(
       c.id,
       body,
       {
@@ -636,7 +631,7 @@ export async function handleChat(
       started,
     );
   } catch (e) {
-    return emit(
+    return await emit(
       c.id,
       e instanceof Error ? e.message : "Falha na resposta.",
       {

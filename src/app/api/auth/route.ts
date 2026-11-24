@@ -25,7 +25,7 @@ export async function POST(req: Request) {
       { error: "Informe e-mail e senha." },
       { status: 400 },
     );
-  const user = db
+  const user = await db
     .select()
     .from(users)
     .where(eq(users.email, parsed.data.email.toLowerCase()))
@@ -38,20 +38,20 @@ export async function POST(req: Request) {
   // Um novo login encerra a sessão anterior deste navegador, se houver.
   const previous = (await cookies()).get("nexo_session")?.value;
   if (previous) {
-    const old = db
+    const old = await db
       .select()
       .from(sessions)
       .where(eq(sessions.token, previous))
       .get();
-    if (old) clearAnalystPresence(old.userId);
-    db.delete(sessions).where(eq(sessions.token, previous)).run();
+    if (old) await clearAnalystPresence(old.userId);
+    await db.delete(sessions).where(eq(sessions.token, previous));
   }
   const token = randomBytes(32).toString("hex");
   const maxAge = parsed.data.remember ? 7 * 86400 : 8 * 3600;
-  db.insert(sessions)
-    .values({ token, userId: user.id, expiresAt: Date.now() + maxAge * 1000 })
-    .run();
-  if (user.role === "analyst") touchAnalyst(user.id);
+  await db
+    .insert(sessions)
+    .values({ token, userId: user.id, expiresAt: Date.now() + maxAge * 1000 });
+  if (user.role === "analyst") await touchAnalyst(user.id);
   const res = NextResponse.json({ user }, noStore);
   res.cookies.set("nexo_session", token, {
     httpOnly: true,
@@ -68,13 +68,13 @@ export async function GET() {
 export async function DELETE() {
   const token = (await cookies()).get("nexo_session")?.value;
   if (token) {
-    const session = db
+    const session = await db
       .select()
       .from(sessions)
       .where(eq(sessions.token, token))
       .get();
-    if (session) clearAnalystPresence(session.userId);
-    db.delete(sessions).where(eq(sessions.token, token)).run();
+    if (session) await clearAnalystPresence(session.userId);
+    await db.delete(sessions).where(eq(sessions.token, token));
   }
   const res = NextResponse.json({ ok: true }, noStore);
   res.cookies.delete("nexo_session");
