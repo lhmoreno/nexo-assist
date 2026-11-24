@@ -341,3 +341,61 @@ describe("jornada de abertura (Anexo B)", () => {
     expect(summary.body).not.toContain(" | ");
   });
 });
+
+describe("resumo da transferência usa o estado real", () => {
+  const summaryOf = (conv: string) =>
+    db
+      .select()
+      .from(schema.messages)
+      .all()
+      .filter((m) => m.conversationId === conv && m.body.startsWith("Resumo"))
+      .at(-1)!.body;
+  it("usa o problema descrito, não o pedido de transferência, e omite prioridade não classificada", async () => {
+    const who = "test-summary";
+    db.insert(schema.articles)
+      .values({
+        id: "test-outlook",
+        title: "Outlook no celular",
+        body: "Instale o app Outlook e entre com o e-mail corporativo.",
+        keywords: "outlook celular configuro",
+      })
+      .onConflictDoNothing()
+      .run();
+    db.insert(schema.users)
+      .values({
+        id: who,
+        name: "Sofia Resumo",
+        email: who + "@nexo.com",
+        role: "employee",
+      })
+      .onConflictDoNothing()
+      .run();
+    await handleChat(who, {
+      action: "send",
+      text: "Como configuro o Outlook no celular?",
+    });
+    const s = await handleChat(who, {
+      action: "send",
+      text: "Quero falar com um analista",
+    });
+    const body = summaryOf(s.conversation.id);
+    expect(body).toContain("Chamado: nenhum associado");
+    expect(body).toContain("Problema: Como configuro o Outlook no celular?");
+    expect(body).not.toContain("Quero falar com um analista");
+    expect(body).not.toContain("Prioridade:");
+  });
+  it("sem relato de TI, diz que não há problema descrito", async () => {
+    const who = "test-summary-empty";
+    db.insert(schema.users)
+      .values({
+        id: who,
+        name: "Zeca Vazio",
+        email: who + "@nexo.com",
+        role: "employee",
+      })
+      .onConflictDoNothing()
+      .run();
+    const s = await handleChat(who, { action: "transfer" });
+    expect(summaryOf(s.conversation.id)).toContain("ainda não descreveu");
+  });
+});

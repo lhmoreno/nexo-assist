@@ -97,34 +97,68 @@ function saveDraft(id: string, draft: Draft | null) {
     .run();
 }
 type Ticket = typeof tickets.$inferSelect;
+const RELEVANT = ["knowledge", "clarify", "create", "update", "reopen"];
 function transfer(id: string, reason: string, ticket?: Ticket) {
-  const rows = db
+  const asc = db
     .select()
     .from(messages)
     .where(eq(messages.conversationId, id))
-    .orderBy(desc(messages.createdAt))
+    .orderBy(messages.createdAt)
     .all();
-  const last = rows
-    .filter((m) => m.sender === "employee" && !QUICK.test(m.body))
-    .at(0);
-  const fromTrace = rows
+  // Problema = última mensagem do funcionário que o agente tratou como relato
+  // de TI. O pedido de transferência não tem resposta do agente e fica de fora.
+  let problemText: string | undefined;
+  asc.forEach((m, i) => {
+    const reply = asc[i + 1];
+    if (
+      m.sender === "employee" &&
+      !QUICK.test(m.body) &&
+      reply?.sender === "agent" &&
+      RELEVANT.includes(String(parse(reply.trace).intent)) &&
+      !/^(sim|não|nao|ainda)\b/i.test(m.body.trim())
+    )
+      problemText = m.body.slice(0, 240);
+  });
+  // Estado do chamado: o mais recente entre rascunho, criação ou cancelamento.
+  const latest = [...asc]
+    .reverse()
     .filter((m) => m.sender === "agent")
     .map((m) => parse(m.trace))
-    .find((t) => t.ticket || t.draft);
-  const t = ticket ?? (fromTrace?.ticket as Ticket | undefined);
-  const d = t ? undefined : (fromTrace?.draft as Draft | undefined);
+    .find((t) => t.ticket || t.draft || t.intent === "cancel");
+  const mentioned = asc
+    .filter((m) => m.sender === "employee")
+    .flatMap((m) => m.body.match(/(?:INC|REQ)-\d+/gi) ?? [])
+    .at(-1)
+    ?.toUpperCase();
+  const ownerId = db
+    .select()
+    .from(conversations)
+    .where(eq(conversations.id, id))
+    .get()?.userId;
+  const t =
+    ticket ??
+    (latest?.ticket as Ticket | undefined) ??
+    (mentioned && ownerId
+      ? db
+          .select()
+          .from(tickets)
+          .where(and(eq(tickets.id, mentioned), eq(tickets.ownerId, ownerId)))
+          .get()
+      : undefined);
+  const d = t ? undefined : (latest?.draft as Draft | undefined);
   const line = (label: string, text?: string | null) =>
     text ? `${label}: ${text}` : null;
   const field = (name: string) =>
     t?.description.match(new RegExp(`^${name}: (.+?)\\.?$`, "m"))?.[1];
   const problem = t
     ? field("Problema") || t.title
-    : d?.problem || d?.title || last?.body.slice(0, 200);
+    : d?.problem || d?.title || problemText;
   const tried = t
     ? field("Já tentou")
     : d?.tried?.length
       ? d.tried.join("; ")
       : undefined;
+  const classified = t?.priority ?? (d ? (latest?.priority as string) : null);
   const text = [
     "Resumo para o analista",
     line("Motivo da transferência", reason),
@@ -133,15 +167,12 @@ function transfer(id: string, reason: string, ticket?: Ticket) {
       : d
         ? "Chamado: ainda não aberto (rascunho aguardando confirmação)"
         : "Chamado: nenhum associado a esta conversa",
-    line("Problema", problem),
     line(
-      "Prioridade",
-      t?.priority ?? (fromTrace?.priority as string | undefined),
+      "Problema",
+      problem || "o funcionário ainda não descreveu um problema",
     ),
-    line("Já tentado", tried),
-    last && last.body !== problem
-      ? line("Última mensagem do funcionário", `“${last.body.slice(0, 240)}”`)
-      : null,
+    line("Prioridade", classified),
+    line("Já tentado", tried && !/nada informado/i.test(tried) ? tried : null),
   ]
     .filter(Boolean)
     .join("\n");
